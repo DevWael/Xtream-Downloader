@@ -1,31 +1,33 @@
+name: xtream-downloader
 services:
   xtream-downloader:
-    image: ghcr.io/devwael/xtream-downloader:latest
     container_name: xtream-downloader
-    restart: unless-stopped
-    ports:
-      - "9876:8080"
+    deploy:
+      resources:
+        limits:
+          memory: 4G
     environment:
-      - XTREAM_URL=http://your-provider:port
-      - XTREAM_USERNAME=your_username
-      - XTREAM_PASSWORD=your_password
-      - CONFIG_DIR=/config
+      - TZ=Africa/Cairo
       - NODE_ENV=production
+      - CONFIG_DIR=/config
+    image: ghcr.io/devwael/xtream-downloader:latest
+    ports:
+      - protocol: tcp
+        published: 9876
+        target: 8080
+    restart: unless-stopped
     volumes:
-      # Persistent configuration and download queue state
-      - ./config:/config
-      
-      # Media volumes — adjust paths to match your system
-      # On TrueNAS, use dataset paths like /mnt/Storage/media/movies
-      - /mnt/Storage/media/movies:/movies
-      - /mnt/Storage/media/cartoon:/cartoon
-      
-    labels:
-      org.truenas.webui.port: "9876"
-
+      - source: /mnt/Apps/xtream-downloader/config
+        target: /config
+        type: bind
+      - source: /mnt/Storage/media/movies
+        target: /movies
+        type: bind
+      - source: /mnt/Storage/media/cartoon
+        target: /cartoon
+        type: bind
 x-portals:
-  webui:
-    host: 0.0.0.0
+  - host: 0.0.0.0
     name: Web UI
     path: /
     port: 9876
