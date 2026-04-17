@@ -4,7 +4,7 @@ services:
     container_name: xtream-downloader
     restart: unless-stopped
     ports:
-      - "8945:8080"
+      - "9876:8080"
     environment:
       - XTREAM_URL=http://your-provider:port
       - XTREAM_USERNAME=your_username
@@ -21,12 +21,12 @@ services:
       - /mnt/Storage/media/cartoon:/cartoon
       
     labels:
-      org.truenas.webui.port: "8945"
+      org.truenas.webui.port: "9876"
 
 x-portals:
   webui:
     host: 0.0.0.0
     name: Web UI
     path: /
-    port: 8945
+    port: 9876
     scheme: http

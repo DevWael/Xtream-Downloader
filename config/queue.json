@@ -4,10 +4,10 @@
     "url": "http://mhiptv.info:2095/movie/01063604029/01100602403/273939.mkv",
     "filename": "The Super Mario Bros بالمصرى.mkv",
     "location": "/Users/ahmadwael/Downloads/xtream/The Super Mario Bros بالمصرى",
-    "status": "downloading",
-    "progress": 15,
+    "status": "paused",
+    "progress": 0,
     "addedAt": "2026-04-17T22:24:50.345Z",
     "totalBytes": 1070209425,
-    "downloadedBytes": 159724328
+    "downloadedBytes": 0
   }
 ]
