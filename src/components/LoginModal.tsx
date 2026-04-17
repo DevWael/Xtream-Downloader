@@ -61,7 +61,7 @@ export const LoginModal: React.FC = () => {
     <div className="login-overlay">
       <div className="login-modal">
         <div className="login-header">
-          <MonitorPlay color="#3b82f6" size={40} />
+          <MonitorPlay color="var(--primary-color)" size={40} />
           <h2>Welcome to Xtream</h2>
           <p>Please enter your IPTV provider credentials</p>
         </div>

@@ -17,7 +17,7 @@ export const Layout: React.FC = () => {
 
       <nav className="navbar">
         <div className="navbar-brand">
-          <MonitorPlay color="#3b82f6" size={28} />
+          <MonitorPlay color="var(--primary-color)" size={28} />
           <span>Xtream Downloader</span>
         </div>
         

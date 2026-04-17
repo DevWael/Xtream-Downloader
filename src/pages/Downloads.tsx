@@ -144,8 +144,8 @@ export const Downloads: React.FC = () => {
           width: 48px;
           height: 48px;
           border-radius: 12px;
-          background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(139, 92, 246, 0.2));
-          border: 1px solid rgba(59, 130, 246, 0.3);
+          background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.2), rgba(var(--primary-rgb), 0.1));
+          border: 1px solid rgba(var(--primary-rgb), 0.3);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -178,8 +178,8 @@ export const Downloads: React.FC = () => {
         }
 
         .dl-stat-icon.active {
-          background: rgba(59, 130, 246, 0.15);
-          color: #3b82f6;
+          background: rgba(var(--primary-rgb), 0.15);
+          color: var(--primary-color);
         }
 
         .dl-stat-icon.done {
@@ -224,7 +224,7 @@ export const Downloads: React.FC = () => {
         }
 
         .dl-section-title .dot.green { background: #10b981; box-shadow: 0 0 8px rgba(16, 185, 129, 0.5); }
-        .dl-section-title .dot.blue { background: #3b82f6; box-shadow: 0 0 8px rgba(59, 130, 246, 0.5); animation: dl-pulse 2s ease-in-out infinite; }
+        .dl-section-title .dot.blue { background: var(--primary-color); box-shadow: 0 0 8px rgba(var(--primary-rgb), 0.5); animation: dl-pulse 2s ease-in-out infinite; }
 
         @keyframes dl-pulse {
           0%, 100% { opacity: 1; }
@@ -262,7 +262,7 @@ export const Downloads: React.FC = () => {
         }
 
         .dl-item-status.downloading {
-          background: rgba(59, 130, 246, 0.15);
+          background: rgba(var(--primary-rgb), 0.15);
         }
         .dl-item-status.queued {
           background: rgba(245, 158, 11, 0.15);
@@ -311,8 +311,8 @@ export const Downloads: React.FC = () => {
         }
 
         .dl-item-meta .dl-tag.size {
-          background: rgba(59, 130, 246, 0.1);
-          color: #60a5fa;
+          background: rgba(var(--primary-rgb), 0.1);
+          color: var(--primary-light);
         }
 
         .dl-item-meta .dl-tag.error {
@@ -345,7 +345,7 @@ export const Downloads: React.FC = () => {
 
         .dl-progress-fill {
           height: 100%;
-          background: linear-gradient(90deg, #3b82f6, #60a5fa);
+          background: linear-gradient(90deg, var(--primary-color), var(--primary-light));
           border-radius: 4px;
           transition: width 0.5s ease;
         }
@@ -353,7 +353,7 @@ export const Downloads: React.FC = () => {
         .dl-progress-pct {
           font-size: 0.8rem;
           font-weight: 700;
-          color: #60a5fa;
+          color: var(--primary-light);
           min-width: 40px;
           text-align: right;
         }
@@ -406,7 +406,7 @@ export const Downloads: React.FC = () => {
           width: 72px;
           height: 72px;
           border-radius: 20px;
-          background: rgba(59, 130, 246, 0.1);
+          background: rgba(var(--primary-rgb), 0.1);
           margin: 0 auto 1.5rem;
           display: flex;
           align-items: center;
@@ -468,7 +468,7 @@ export const Downloads: React.FC = () => {
       <div className="downloads-header">
         <div className="downloads-header-left">
           <div className="downloads-icon-wrap">
-            <DownloadCloud size={24} color="#3b82f6" />
+            <DownloadCloud size={24} color="var(--primary-color)" />
           </div>
           <h1>Downloads</h1>
         </div>
@@ -517,7 +517,7 @@ export const Downloads: React.FC = () => {
       {queue.length === 0 ? (
         <div className="dl-empty">
           <div className="dl-empty-icon">
-            <DownloadCloud size={32} color="#3b82f6" />
+            <DownloadCloud size={32} color="var(--primary-color)" />
           </div>
           <h3>No downloads yet</h3>
           <p>Browse Movies or Series to start downloading content.</p>
@@ -535,7 +535,7 @@ export const Downloads: React.FC = () => {
                 <div key={item.id} className="dl-item">
                   <div className="dl-item-top">
                     <div className={`dl-item-status ${item.status}`}>
-                      {item.status === 'downloading' && <Loader2 size={18} color="#3b82f6" className="dl-spin" />}
+                      {item.status === 'downloading' && <Loader2 size={18} color="var(--primary-color)" className="dl-spin" />}
                       {item.status === 'queued' && <Clock size={18} color="#f59e0b" />}
                       {item.status === 'paused' && <Pause size={18} color="#f59e0b" />}
                     </div>

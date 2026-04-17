@@ -114,8 +114,8 @@ export const Settings: React.FC = () => {
           width: 48px;
           height: 48px;
           border-radius: 12px;
-          background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(139, 92, 246, 0.2));
-          border: 1px solid rgba(59, 130, 246, 0.3);
+          background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.2), rgba(var(--primary-rgb), 0.1));
+          border: 1px solid rgba(var(--primary-rgb), 0.3);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -269,7 +269,7 @@ export const Settings: React.FC = () => {
         .location-field input:focus {
           outline: none;
           border-color: var(--primary-color);
-          box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+          box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.15);
         }
 
         .location-field input::placeholder {
