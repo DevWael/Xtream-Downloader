@@ -34,8 +34,8 @@ export const MediaCard: React.FC<MediaCardProps> = ({
   const rating = isMovie ? (item as Stream).rating_5based : (item as Series).rating_5based;
   const meta = isMovie ? (item as Stream).added : (item as Series).releaseDate;
 
-  // Handle fallback image
-  const defaultImage = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9IiMzMzMiIC8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZpbGw9IiM3NzciIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjI0IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSI+Tm8gSW1hZ2U8L3RleHQ+PC9zdmc+';
+  // Handle fallback image — a prominent film icon on dark gradient
+  const defaultImage = `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="400" height="600" viewBox="0 0 400 600"><defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#1e293b"/><stop offset="100%" stop-color="#0f172a"/></linearGradient></defs><rect width="400" height="600" fill="url(#bg)"/><g transform="translate(110,180)" fill="none" stroke="#475569" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><rect x="0" y="0" width="180" height="180" rx="16"/><polygon points="65,35 145,90 65,145" fill="#334155" stroke="#475569"/></g><text x="200" y="420" fill="#64748b" font-family="sans-serif" font-size="24" font-weight="600" text-anchor="middle">No Image</text></svg>`)}`;
 
   const handleClick = () => {
     if (selectable && onSelect) {

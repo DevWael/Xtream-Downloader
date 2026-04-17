@@ -37,7 +37,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({ streamUrl, t
           src={streamUrl} 
           controls 
           autoPlay 
-          style={{ width: '100%', display: 'block', maxHeight: '75vh', outline: 'none' }} 
+          style={{ width: '100%', display: 'block', maxHeight: '75vh', aspectRatio: '16 / 9', outline: 'none', background: '#000' }} 
         />
       </div>
     </div>

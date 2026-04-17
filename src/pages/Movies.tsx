@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Download, CheckSquare } from 'lucide-react';
+import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
+import { Download, CheckSquare, Search } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import type { Category, Stream } from '../services/api';
 import { getVodCategories, getVodStreams, getStreamUrl, downloadMedia } from '../services/api';
@@ -14,7 +14,7 @@ import { showToast } from '../utils/toast';
 export const Movies: React.FC = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [searchParams, setSearchParams] = useSearchParams();
-  const activeCategory = searchParams.get('category') || '';
+  const activeCategory = searchParams.get('category') || 'all';
   
   const setActiveCategory = (cat: string) => {
     setSearchParams(prev => {
@@ -22,12 +22,14 @@ export const Movies: React.FC = () => {
       return prev;
     });
   };
-  const [allStreams, setAllStreams] = useState<Stream[]>([]);
+  const [streams, setStreams] = useState<Stream[]>([]);
   const [categoryCounts, setCategoryCounts] = useState<Record<string, number>>({});
+  const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadingStreams, setLoadingStreams] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { authConfig } = useAuth();
+  const [categorySearch, setCategorySearch] = useState('');
 
   // New states for bulk download & selection
   const { isDownloaded, toggleDownloaded } = useDownloaded();
@@ -43,51 +45,97 @@ export const Movies: React.FC = () => {
     isBulk?: boolean
   } | null>(null);
 
-  // Derived state for currently visible streams
-  const streams = allStreams.filter(s => s.category_id === activeCategory);
+  const [contentSearch, setContentSearch] = useState('');
+  const [visibleCount, setVisibleCount] = useState(60);
+  const LOAD_INCREMENT = 60;
+  const observerRef = useRef<IntersectionObserver | null>(null);
 
+  // Sort newest first
+  const sortedStreams = useMemo(() => 
+    [...streams].sort((a, b) => Number(b.added || 0) - Number(a.added || 0))
+  , [streams]);
+
+  // Filtered categories for search
+  const filteredCategories = useMemo(() => 
+    categories.filter(cat => 
+      cat.category_name.toLowerCase().includes(categorySearch.toLowerCase())
+    ), [categories, categorySearch]
+  );
+
+  // Content search + infinite scroll
+  const filteredStreams = useMemo(() => 
+    contentSearch 
+      ? sortedStreams.filter(s => s.name.toLowerCase().includes(contentSearch.toLowerCase()))
+      : sortedStreams
+  , [sortedStreams, contentSearch]);
+  const visibleStreams = filteredStreams.slice(0, visibleCount);
+  const hasMore = visibleCount < filteredStreams.length;
+
+  // Infinite scroll — callback ref ensures observer connects when sentinel appears in DOM
+  const sentinelRef = useCallback((node: HTMLDivElement | null) => {
+    if (observerRef.current) observerRef.current.disconnect();
+    if (!node || !hasMore) return;
+    observerRef.current = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setVisibleCount(prev => prev + LOAD_INCREMENT);
+        }
+      },
+      { rootMargin: '400px' }
+    );
+    observerRef.current.observe(node);
+  }, [hasMore]);
+
+  // Load categories on mount + background fetch all for counts
   useEffect(() => {
-    const fetchData = async () => {
+    const init = async () => {
       try {
         setLoading(true);
-        // Fetch categories first to populate the sidebar quickly
         const cats = await getVodCategories();
         setCategories(cats);
-        if (cats.length > 0 && !searchParams.get('category')) {
-          setSearchParams(prev => {
-            prev.set('category', cats[0].category_id);
-            return prev;
-          }, { replace: true });
-        }
         setLoading(false);
 
-        // Fetch all streams to cache them and compute counts
-        setLoadingStreams(true);
-        const str = await getVodStreams();
-        
-        // Compute category counts
+        // Background: fetch all streams just for category counts
+        const allStr = await getVodStreams();
         const counts: Record<string, number> = {};
-        str.forEach(s => {
+        allStr.forEach(s => {
           counts[s.category_id] = (counts[s.category_id] || 0) + 1;
         });
-        
         setCategoryCounts(counts);
-        setAllStreams(str);
+        setTotalCount(allStr.length);
       } catch (err) {
         setError('Failed to load movie data');
-      } finally {
         setLoading(false);
+      }
+    };
+    init();
+  }, []);
+
+  // Load streams when active category changes
+  useEffect(() => {
+    const fetchCategoryStreams = async () => {
+      try {
+        setLoadingStreams(true);
+        setError(null);
+        const str = activeCategory === 'all' 
+          ? await getVodStreams() 
+          : await getVodStreams(activeCategory);
+        setStreams(str);
+      } catch (err) {
+        setError('Failed to load streams');
+      } finally {
         setLoadingStreams(false);
       }
     };
-    
-    fetchData();
-  }, []);
+    if (!loading) fetchCategoryStreams();
+  }, [activeCategory, loading]);
 
-  // Reset selection when changing category
+  // Reset selection, visible count, and scroll position when changing category
   useEffect(() => {
     setSelectedItems(new Set());
     setSelectionMode(false);
+    setVisibleCount(60);
+    window.scrollTo(0, 0);
   }, [activeCategory]);
 
   const toggleSelection = (streamId: number) => {
@@ -141,9 +189,26 @@ export const Movies: React.FC = () => {
   return (
     <div className="page-with-sidebar">
       <aside>
-        <h2 style={{ marginBottom: '1rem' }}>Categories</h2>
+        <h2>Categories</h2>
+        <div className="category-search">
+          <Search size={15} className="category-search-icon" />
+          <input 
+            type="text" 
+            placeholder="Search categories..." 
+            value={categorySearch}
+            onChange={e => setCategorySearch(e.target.value)}
+            className="category-search-input"
+          />
+        </div>
         <div className="category-list">
-          {categories.map((cat) => (
+          <div
+            className={`category-item ${activeCategory === 'all' ? 'active' : ''}`}
+            onClick={() => setActiveCategory('all')}
+          >
+            <span>All</span>
+            <span className="category-count">{totalCount}</span>
+          </div>
+          {filteredCategories.map((cat) => (
             <div
               key={cat.category_id}
               className={`category-item ${activeCategory === cat.category_id ? 'active' : ''}`}
@@ -163,6 +228,16 @@ export const Movies: React.FC = () => {
       <section>
         <div className="header-actions">
           <h2 style={{ margin: 0 }}>Movies</h2>
+          <div className="content-search">
+            <Search size={16} className="content-search-icon" />
+            <input
+              type="text"
+              placeholder="Search movies..."
+              value={contentSearch}
+              onChange={e => { setContentSearch(e.target.value); setVisibleCount(60); }}
+              className="content-search-input"
+            />
+          </div>
           
           {!loadingStreams && streams.length > 0 && (
             <div className="header-actions-right">
@@ -207,8 +282,9 @@ export const Movies: React.FC = () => {
         {loadingStreams ? (
           <Loader />
         ) : (
+          <>
           <div className="grid grid-large">
-            {streams.map((stream) => (
+            {visibleStreams.map((stream) => (
               <MediaCard 
                 key={stream.stream_id} 
                 item={stream} 
@@ -235,10 +311,19 @@ export const Movies: React.FC = () => {
                 })}
               />
             ))}
-            {streams.length === 0 && !error && (
-              <p style={{ color: 'var(--text-secondary)' }}>No movies found in this category.</p>
+            {filteredStreams.length === 0 && !error && (
+              <p style={{ color: 'var(--text-secondary)' }}>No movies found.</p>
             )}
           </div>
+
+          <div ref={sentinelRef} className="scroll-sentinel" />
+          {hasMore && <div className="scroll-loading"><Loader /></div>}
+          {filteredStreams.length > 0 && (
+            <div className="scroll-info">
+              Showing {Math.min(visibleCount, filteredStreams.length)} of {filteredStreams.length}
+            </div>
+          )}
+          </>
         )}
       </section>
 

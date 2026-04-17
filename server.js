@@ -254,6 +254,94 @@ const processQueue = () => {
         return;
       }
 
+      const contentType = res.headers['content-type'] || '';
+      const isHLS = contentType.includes('mpegurl') || contentType.includes('m3u') || urlToFetch.includes('.m3u8');
+
+      if (isHLS) {
+        // HLS stream — read playlist, then download segments
+        console.log(`[Queue] HLS playlist detected for "${nextItem.filename}"`);
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', async () => {
+          const lines = data.split('\n');
+          const segments = lines.filter(l => l.trim() && !l.startsWith('#')).map(l => new URL(l.trim(), urlToFetch).toString());
+
+          if (segments.length === 0) {
+            nextItem.status = 'failed';
+            nextItem.error = 'HLS playlist is empty';
+            currentDownloadReq = null;
+            saveQueue();
+            processQueue();
+            return;
+          }
+
+          console.log(`[Queue] Downloading ${segments.length} HLS segments for "${nextItem.filename}"`);
+          
+          // Fix extension to .mp4 for HLS streams
+          const hlsFilePath = filePath.replace(/\.[^/.]+$/, '') + '.mp4';
+          if (nextItem.filename.match(/\.[^/.]+$/)) {
+            nextItem.filename = nextItem.filename.replace(/\.[^/.]+$/, '.mp4');
+          }
+
+          const fileStream = fs.createWriteStream(hlsFilePath);
+          let completedSegments = 0;
+
+          const downloadHLSSegment = (segUrl) => {
+            return new Promise((resolve) => {
+              const segTarget = new URL(segUrl);
+              const segClient = segTarget.protocol === 'https:' ? https : http;
+
+              const fetchSeg = (urlObj, retries = 3) => {
+                segClient.get(urlObj, (segRes) => {
+                  if ([301, 302, 303, 307, 308].includes(segRes.statusCode || 0) && segRes.headers.location) {
+                    return fetchSeg(new URL(segRes.headers.location, urlObj.toString()), retries);
+                  }
+                  if (segRes.statusCode !== 200) {
+                    if (retries > 0) return fetchSeg(urlObj, retries - 1);
+                    return resolve();
+                  }
+                  segRes.pipe(fileStream, { end: false });
+                  segRes.on('end', () => {
+                    completedSegments++;
+                    nextItem.progress = Math.round((completedSegments / segments.length) * 100);
+                    if (completedSegments % 5 === 0) saveQueue();
+                    resolve();
+                  });
+                  segRes.on('error', () => resolve());
+                }).on('error', () => {
+                  if (retries > 0) return fetchSeg(urlObj, retries - 1);
+                  resolve();
+                });
+              };
+              fetchSeg(segTarget);
+            });
+          };
+
+          try {
+            for (const segUrl of segments) {
+              await downloadHLSSegment(segUrl);
+            }
+            fileStream.end();
+            fileStream.on('finish', () => {
+              nextItem.status = 'completed';
+              nextItem.progress = 100;
+              currentDownloadReq = null;
+              saveQueue();
+              processQueue();
+            });
+          } catch (err) {
+            fs.unlink(hlsFilePath, () => {});
+            nextItem.status = 'failed';
+            nextItem.error = err.message || 'HLS download failed';
+            currentDownloadReq = null;
+            saveQueue();
+            processQueue();
+          }
+        });
+        return;
+      }
+
+      // Normal direct file download
       const totalBytes = parseInt(res.headers['content-length'] || '0', 10);
       let downloadedBytes = 0;
       

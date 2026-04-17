@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Download, ChevronLeft, Check, Play } from 'lucide-react';
+import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
+import { Download, ChevronLeft, Check, Play, Search } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import type { Category, Series as SeriesModel, SeriesInfo } from '../services/api';
 import { getSeriesCategories, getSeries, getSeriesInfo, getStreamUrl } from '../services/api';
@@ -15,7 +15,7 @@ import { showToast } from '../utils/toast';
 export const Series: React.FC = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [searchParams, setSearchParams] = useSearchParams();
-  const activeCategory = searchParams.get('category') || '';
+  const activeCategory = searchParams.get('category') || 'all';
   const setActiveCategory = (cat: string) => {
     setSearchParams(prev => { 
       prev.set('category', cat); 
@@ -25,11 +25,12 @@ export const Series: React.FC = () => {
     });
   };
   
-  const [allSeries, setAllSeries] = useState<SeriesModel[]>([]);
+  const [seriesList, setSeriesList] = useState<SeriesModel[]>([]);
   const [categoryCounts, setCategoryCounts] = useState<Record<string, number>>({});
+  const [totalCount, setTotalCount] = useState(0);
   
   const selectedSeriesId = searchParams.get('series');
-  const selectedSeries = allSeries.find(s => s.series_id.toString() === selectedSeriesId) || null;
+  const selectedSeries = seriesList.find(s => s.series_id.toString() === selectedSeriesId) || null;
   const setSelectedSeries = (s: SeriesModel | null) => {
     setSearchParams(prev => {
       if (s) prev.set('series', s.series_id.toString());
@@ -53,6 +54,7 @@ export const Series: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [loadingContent, setLoadingContent] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [categorySearch, setCategorySearch] = useState('');
 
   const [previewStream, setPreviewStream] = useState<{url: string, title: string} | null>(null);
 
@@ -69,42 +71,96 @@ export const Series: React.FC = () => {
     isBulk?: boolean
   } | null>(null);
 
-  // Derived state for currently visible series
-  const seriesList = allSeries.filter(s => s.category_id === activeCategory);
+  const [contentSearch, setContentSearch] = useState('');
+  const [visibleCount, setVisibleCount] = useState(60);
+  const LOAD_INCREMENT = 60;
+  const observerRef = useRef<IntersectionObserver | null>(null);
 
+  // Sort newest first
+  const sortedSeriesList = useMemo(() => 
+    [...seriesList].sort((a, b) => Number(b.last_modified || 0) - Number(a.last_modified || 0))
+  , [seriesList]);
+
+  // Filtered categories for search
+  const filteredCategories = useMemo(() => 
+    categories.filter(cat => 
+      cat.category_name.toLowerCase().includes(categorySearch.toLowerCase())
+    ), [categories, categorySearch]
+  );
+
+  // Content search + infinite scroll
+  const filteredSeriesList = useMemo(() => 
+    contentSearch 
+      ? sortedSeriesList.filter(s => s.name.toLowerCase().includes(contentSearch.toLowerCase()))
+      : sortedSeriesList
+  , [sortedSeriesList, contentSearch]);
+  const visibleSeries = filteredSeriesList.slice(0, visibleCount);
+  const hasMore = visibleCount < filteredSeriesList.length;
+
+  // Infinite scroll — callback ref ensures observer connects when sentinel appears in DOM
+  const sentinelRef = useCallback((node: HTMLDivElement | null) => {
+    if (observerRef.current) observerRef.current.disconnect();
+    if (!node || !hasMore) return;
+    observerRef.current = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setVisibleCount(prev => prev + LOAD_INCREMENT);
+        }
+      },
+      { rootMargin: '400px' }
+    );
+    observerRef.current.observe(node);
+  }, [hasMore]);
+
+  // Load categories on mount + background fetch all for counts
   useEffect(() => {
-    const fetchData = async () => {
+    const init = async () => {
       try {
         setLoading(true);
-        // Fetch categories first
         const cats = await getSeriesCategories();
         setCategories(cats);
-        if (cats.length > 0 && !searchParams.get('category')) {
-          setSearchParams(prev => { prev.set('category', cats[0].category_id); return prev; }, { replace: true });
-        }
         setLoading(false);
 
-        // Fetch all series to cache them and compute counts
-        setLoadingContent(true);
+        // Background: fetch all series just for category counts
         const allStr = await getSeries();
-        
         const counts: Record<string, number> = {};
         allStr.forEach(s => {
           counts[s.category_id] = (counts[s.category_id] || 0) + 1;
         });
-        
         setCategoryCounts(counts);
-        setAllSeries(allStr);
+        setTotalCount(allStr.length);
       } catch (err) {
         setError('Failed to load series data');
-      } finally {
         setLoading(false);
+      }
+    };
+    init();
+  }, []);
+
+  // Load series when active category changes
+  useEffect(() => {
+    const fetchCategorySeries = async () => {
+      try {
+        setLoadingContent(true);
+        setError(null);
+        const str = activeCategory === 'all' 
+          ? await getSeries() 
+          : await getSeries(activeCategory);
+        setSeriesList(str);
+      } catch (err) {
+        setError('Failed to load series');
+      } finally {
         setLoadingContent(false);
       }
     };
-    
-    fetchData();
-  }, []);
+    if (!loading && !selectedSeries) fetchCategorySeries();
+  }, [activeCategory, loading]);
+
+  // Reset visible count and scroll position when changing category
+  useEffect(() => {
+    setVisibleCount(60);
+    window.scrollTo(0, 0);
+  }, [activeCategory]);
 
   // Load Series Info (Episodes)
   useEffect(() => {
@@ -213,9 +269,26 @@ export const Series: React.FC = () => {
   return (
     <div className="page-with-sidebar">
       <aside>
-        <h2 style={{ marginBottom: '1rem' }}>Categories</h2>
+        <h2>Categories</h2>
+        <div className="category-search">
+          <Search size={15} className="category-search-icon" />
+          <input 
+            type="text" 
+            placeholder="Search categories..." 
+            value={categorySearch}
+            onChange={e => setCategorySearch(e.target.value)}
+            className="category-search-input"
+          />
+        </div>
         <div className="category-list">
-          {categories.map((cat) => (
+          <div
+            className={`category-item ${activeCategory === 'all' ? 'active' : ''}`}
+            onClick={() => setActiveCategory('all')}
+          >
+            <span>All</span>
+            <span className="category-count">{totalCount}</span>
+          </div>
+          {filteredCategories.map((cat) => (
             <div
               key={cat.category_id}
               className={`category-item ${activeCategory === cat.category_id ? 'active' : ''}`}
@@ -418,24 +491,46 @@ export const Series: React.FC = () => {
           </div>
         ) : (
           <div>
-            <h2 style={{ marginBottom: '1rem' }}>Series</h2>
+            <div className="header-actions">
+              <h2 style={{ margin: 0 }}>Series</h2>
+              <div className="content-search">
+                <Search size={16} className="content-search-icon" />
+                <input
+                  type="text"
+                  placeholder="Search series..."
+                  value={contentSearch}
+                  onChange={e => { setContentSearch(e.target.value); setVisibleCount(60); }}
+                  className="content-search-input"
+                />
+              </div>
+            </div>
             {error && <div className="alert">{error}</div>}
             
             {loadingContent ? (
               <Loader />
             ) : (
+              <>
               <div className="grid grid-large">
-                {seriesList.map((series) => (
+                {visibleSeries.map((series) => (
                   <MediaCard 
                     key={series.series_id} 
                     item={series} 
                     onClick={() => setSelectedSeries(series)}
                   />
                 ))}
-                {seriesList.length === 0 && !error && (
-                  <p style={{ color: 'var(--text-secondary)' }}>No series found in this category.</p>
+                {filteredSeriesList.length === 0 && !error && (
+                  <p style={{ color: 'var(--text-secondary)' }}>No series found.</p>
                 )}
               </div>
+
+              <div ref={sentinelRef} className="scroll-sentinel" />
+              {hasMore && <div className="scroll-loading"><Loader /></div>}
+              {filteredSeriesList.length > 0 && (
+                <div className="scroll-info">
+                  Showing {Math.min(visibleCount, filteredSeriesList.length)} of {filteredSeriesList.length}
+                </div>
+              )}
+              </>
             )}
           </div>
         )}
