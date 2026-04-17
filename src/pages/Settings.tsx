@@ -10,13 +10,19 @@ interface Location {
 }
 
 const THEMES = [
-  { id: 'ocean',   label: 'Ocean',   value: '',        colors: ['#0f172a', '#3b82f6'] },
-  { id: 'emerald', label: 'Emerald', value: 'emerald', colors: ['#022c22', '#10b981'] },
-  { id: 'purple',  label: 'Purple',  value: 'purple',  colors: ['#13052e', '#8b5cf6'] },
-  { id: 'rose',    label: 'Rose',    value: 'rose',    colors: ['#1c0a12', '#f43f5e'] },
-  { id: 'amber',   label: 'Amber',   value: 'amber',   colors: ['#1c1002', '#f59e0b'] },
-  { id: 'cyan',    label: 'Cyan',    value: 'cyan',    colors: ['#042f2e', '#06b6d4'] },
-  { id: 'slate',   label: 'Slate',   value: 'slate',   colors: ['#111111', '#a1a1aa'] },
+  { id: 'ocean',    label: 'Ocean',    value: '',         colors: ['#0f172a', '#3b82f6'] },
+  { id: 'emerald',  label: 'Emerald',  value: 'emerald',  colors: ['#022c22', '#10b981'] },
+  { id: 'purple',   label: 'Purple',   value: 'purple',   colors: ['#13052e', '#8b5cf6'] },
+  { id: 'rose',     label: 'Rose',     value: 'rose',     colors: ['#1c0a12', '#f43f5e'] },
+  { id: 'amber',    label: 'Amber',    value: 'amber',    colors: ['#1c1002', '#f59e0b'] },
+  { id: 'cyan',     label: 'Cyan',     value: 'cyan',     colors: ['#042f2e', '#06b6d4'] },
+  { id: 'slate',    label: 'Slate',    value: 'slate',    colors: ['#111111', '#a1a1aa'] },
+  { id: 'midnight', label: 'Midnight', value: 'midnight', colors: ['#0a0e1a', '#7dd3fc'] },
+  { id: 'storm',    label: 'Storm',    value: 'storm',    colors: ['#111827', '#64748b'] },
+  { id: 'obsidian', label: 'Obsidian', value: 'obsidian', colors: ['#09090b', '#eab308'] },
+  { id: 'arctic',   label: 'Arctic',   value: 'arctic',   colors: ['#0c1222', '#38bdf8'] },
+  { id: 'carbon',   label: 'Carbon',   value: 'carbon',   colors: ['#121212', '#78716c'] },
+  { id: 'sapphire', label: 'Sapphire', value: 'sapphire', colors: ['#0c0a2a', '#6366f1'] },
 ];
 
 export const Settings: React.FC = () => {
