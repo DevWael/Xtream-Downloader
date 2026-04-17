@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext, createContext } from 'react';
 
 export interface AuthConfig {
   host: string;
@@ -19,7 +19,18 @@ export const getStoredAuthConfig = (): AuthConfig | null => {
   }
 };
 
-export const useAuth = () => {
+interface AuthContextType {
+  authConfig: AuthConfig | null;
+  isAuthenticated: boolean;
+  isLoaded: boolean;
+  setAuthConfig: (config: AuthConfig | null) => void;
+  logout: () => void;
+  refreshConfig: () => Promise<void>;
+}
+
+const AuthContext = createContext<AuthContextType | null>(null);
+
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [authConfig, setAuthConfigState] = useState<AuthConfig | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
 
@@ -61,12 +72,6 @@ export const useAuth = () => {
 
   useEffect(() => {
     fetchEnvConfig().then(() => setIsLoaded(true));
-    
-    const handleConfigUpdate = () => {
-      fetchEnvConfig();
-    };
-    window.addEventListener('auth_config_updated', handleConfigUpdate);
-    return () => window.removeEventListener('auth_config_updated', handleConfigUpdate);
   }, []);
 
   const setAuthConfig = (config: AuthConfig | null) => {
@@ -80,12 +85,24 @@ export const useAuth = () => {
 
   const logout = () => setAuthConfig(null);
 
-  return {
-    authConfig,
-    isAuthenticated: authConfig !== null,
-    isLoaded,
-    setAuthConfig,
-    logout,
-    refreshConfig: fetchEnvConfig
-  };
+  return (
+    <AuthContext.Provider value={{
+      authConfig,
+      isAuthenticated: authConfig !== null,
+      isLoaded,
+      setAuthConfig,
+      logout,
+      refreshConfig: fetchEnvConfig
+    }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export const useAuth = (): AuthContextType => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
 };

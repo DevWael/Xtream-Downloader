@@ -5,21 +5,25 @@ import { Movies } from './pages/Movies';
 import { Series } from './pages/Series';
 import { Settings } from './pages/Settings';
 import { Downloads } from './pages/Downloads';
+import { AuthProvider } from './hooks/useAuth';
 
 function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Layout />}>
-          <Route index element={<Home />} />
-          <Route path="movies" element={<Movies />} />
-          <Route path="series" element={<Series />} />
-          <Route path="downloads" element={<Downloads />} />
-          <Route path="settings" element={<Settings />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<Layout />}>
+            <Route index element={<Home />} />
+            <Route path="movies" element={<Movies />} />
+            <Route path="series" element={<Series />} />
+            <Route path="downloads" element={<Downloads />} />
+            <Route path="settings" element={<Settings />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   );
 }
 
 export default App;
+
