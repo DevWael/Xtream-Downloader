@@ -115,20 +115,23 @@ export const getSeriesInfo = async (seriesId: string): Promise<SeriesInfo> => {
   return fetchFromApi('get_series_info', { series_id: seriesId });
 };
 
-export const getMovieDownloadUrl = (streamId: number, extension: string, title?: string): string => {
+export const getStreamUrl = (streamId: number | string, extension: string, type: 'movie' | 'series' = 'movie'): string => {
   const config = getStoredAuthConfig();
   if (!config) return '';
   const baseUrl = config.host.replace(/\/$/, '');
-  const originalUrl = `${baseUrl}/movie/${config.username}/${config.password}/${streamId}.${extension}`;
+  return `${baseUrl}/${type}/${config.username}/${config.password}/${streamId}.${extension}`;
+};
+
+export const getMovieDownloadUrl = (streamId: number, extension: string, title?: string): string => {
+  const originalUrl = getStreamUrl(streamId, extension, 'movie');
+  if (!originalUrl) return '';
   const filename = title ? `${title}.${extension}` : `movie_${streamId}.${extension}`;
   return `/api/download?url=${encodeURIComponent(originalUrl)}&filename=${encodeURIComponent(filename)}`;
 };
 
 export const getSeriesDownloadUrl = (streamId: string, extension: string, title?: string): string => {
-  const config = getStoredAuthConfig();
-  if (!config) return '';
-  const baseUrl = config.host.replace(/\/$/, '');
-  const originalUrl = `${baseUrl}/series/${config.username}/${config.password}/${streamId}.${extension}`;
+  const originalUrl = getStreamUrl(streamId, extension, 'series');
+  if (!originalUrl) return '';
   const filename = title ? `${title}.${extension}` : `episode_${streamId}.${extension}`;
   return `/api/download?url=${encodeURIComponent(originalUrl)}&filename=${encodeURIComponent(filename)}`;
 };

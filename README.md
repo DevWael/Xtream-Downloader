@@ -6,9 +6,10 @@ A sleek, modern web application for downloading movies and series from your IPTV
 
 - **Dynamic Authentication:** Log in securely using your provider's Server URL, Username, and Password. Credentials are saved locally to your browser (`localStorage`).
 - **Movies & Series Browsing:** Automatically categorizes content, providing posters, metadata, and quick access.
+- **Media Previewing:** Watch movies and episodes directly within the application using a sleek overlay video player before downloading.
 - **Bulk Downloading:** Mark items and download them individually or in bulk.
 - **CORS-Free Proxying:** All data and download traffic is seamlessly proxied through the local Vite server, completely bypassing browser CORS restrictions and Mixed Content issues.
-- **Premium Frosted-Glass UI:** Modern, responsive design featuring glassmorphism and subtle animations.
+- **Premium Frosted-Glass UI:** Modern, responsive design featuring glassmorphism, subtle animations, and hover overlays.
 
 ## Tech Stack
 

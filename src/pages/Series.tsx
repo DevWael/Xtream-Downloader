@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Download, ChevronLeft, Check } from 'lucide-react';
+import { Download, ChevronLeft, Check, Play } from 'lucide-react';
 import type { Category, Series as SeriesModel, SeriesInfo } from '../services/api';
-import { getSeriesCategories, getSeries, getSeriesInfo, getSeriesDownloadUrl } from '../services/api';
+import { getSeriesCategories, getSeries, getSeriesInfo, getSeriesDownloadUrl, getStreamUrl } from '../services/api';
 import { Loader } from '../components/Loader';
 import { MediaCard } from '../components/MediaCard';
 import { useDownloaded } from '../hooks/useDownloaded';
+import { VideoPlayerModal } from '../components/VideoPlayerModal';
 
 export const Series: React.FC = () => {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -20,6 +21,8 @@ export const Series: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [loadingContent, setLoadingContent] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [previewStream, setPreviewStream] = useState<{url: string, title: string} | null>(null);
 
   // New states for downloaded and bulk selection
   const { isDownloaded, toggleDownloaded } = useDownloaded();
@@ -274,15 +277,32 @@ export const Series: React.FC = () => {
                         onClick={(e) => e.stopPropagation()}
                       />
                       
-                      <div style={{ position: 'relative' }}>
-                        <img 
-                          src={episode.info?.movie_image || selectedSeries.cover} 
-                          alt={episode.title} 
-                          className="episode-thumbnail"
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).src = selectedSeries.cover;
-                          }}
-                        />
+                        <div className="media-image-wrapper" style={{ width: '160px', height: '90px', padding: 0, borderRadius: 'var(--border-radius-sm)', flexShrink: 0 }}>
+                          <img 
+                            src={episode.info?.movie_image || selectedSeries.cover} 
+                            alt={episode.title} 
+                            className="media-image"
+                            style={{ position: 'relative' }}
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = selectedSeries.cover;
+                            }}
+                          />
+                          <div className="media-image-overlay">
+                            <button 
+                              className="play-button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setPreviewStream({
+                                  url: getStreamUrl(episode.id, episode.container_extension, 'series'),
+                                  title: `Episode ${episode.episode_num}: ${episode.title}`
+                                });
+                              }}
+                              title="Preview Episode"
+                              style={{ width: '36px', height: '36px' }}
+                            >
+                              <Play size={18} fill="currentColor" />
+                            </button>
+                          </div>
                         {isDownloaded(episode.id) ? (
                           <button 
                             className="downloaded-toggle active" 
@@ -329,6 +349,7 @@ export const Series: React.FC = () => {
                           onClick={() => {
                             if (!isDownloaded(episode.id)) toggleDownloaded(episode.id);
                           }}
+                          style={{ padding: '0.5rem' }}
                         >
                           <Download size={18} />
                         </a>
@@ -367,6 +388,14 @@ export const Series: React.FC = () => {
           </div>
         )}
       </section>
+
+      {previewStream && (
+        <VideoPlayerModal
+          streamUrl={previewStream.url}
+          title={previewStream.title}
+          onClose={() => setPreviewStream(null)}
+        />
+      )}
     </div>
   );
 };

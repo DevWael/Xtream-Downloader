@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { Download, CheckSquare } from 'lucide-react';
 import type { Category, Stream } from '../services/api';
-import { getVodCategories, getVodStreams, getMovieDownloadUrl } from '../services/api';
+import { getVodCategories, getVodStreams, getMovieDownloadUrl, getStreamUrl } from '../services/api';
 import { Loader } from '../components/Loader';
 import { MediaCard } from '../components/MediaCard';
 import { useDownloaded } from '../hooks/useDownloaded';
+import { VideoPlayerModal } from '../components/VideoPlayerModal';
 
 export const Movies: React.FC = () => {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -17,6 +18,7 @@ export const Movies: React.FC = () => {
 
   // New states for bulk download
   const { isDownloaded, toggleDownloaded } = useDownloaded();
+  const [previewStream, setPreviewStream] = useState<{url: string, title: string} | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set());
 
@@ -192,6 +194,10 @@ export const Movies: React.FC = () => {
                 selectable={selectionMode}
                 selected={selectedItems.has(stream.stream_id)}
                 onSelect={() => toggleSelection(stream.stream_id)}
+                onPreview={() => setPreviewStream({
+                  url: getStreamUrl(stream.stream_id, stream.container_extension, 'movie'),
+                  title: stream.name
+                })}
               />
             ))}
             {streams.length === 0 && !error && (
@@ -200,6 +206,14 @@ export const Movies: React.FC = () => {
           </div>
         )}
       </section>
+
+      {previewStream && (
+        <VideoPlayerModal
+          streamUrl={previewStream.url}
+          title={previewStream.title}
+          onClose={() => setPreviewStream(null)}
+        />
+      )}
     </div>
   );
 };

@@ -1,4 +1,4 @@
-import { Download, Star, Check, CheckSquare } from 'lucide-react';
+import { Download, Star, Check, CheckSquare, Play } from 'lucide-react';
 import type { Stream, Series } from '../services/api';
 
 interface MediaCardProps {
@@ -13,6 +13,7 @@ interface MediaCardProps {
   selectable?: boolean;
   selected?: boolean;
   onSelect?: () => void;
+  onPreview?: () => void;
 }
 
 export const MediaCard: React.FC<MediaCardProps> = ({ 
@@ -23,7 +24,8 @@ export const MediaCard: React.FC<MediaCardProps> = ({
   onToggleDownloaded,
   selectable,
   selected,
-  onSelect
+  onSelect,
+  onPreview
 }) => {
   const isMovie = 'stream_id' in item;
   
@@ -79,6 +81,20 @@ export const MediaCard: React.FC<MediaCardProps> = ({
             (e.target as HTMLImageElement).src = defaultImage;
           }}
         />
+        {onPreview && !selectable && (
+          <div className="media-image-overlay">
+            <button 
+              className="play-button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onPreview();
+              }}
+              title="Preview Video"
+            >
+              <Play size={24} fill="currentColor" />
+            </button>
+          </div>
+        )}
       </div>
       <div className="media-content">
         <h3 className="media-title">{title}</h3>
