@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { getQueue, removeQueueItem, clearCompletedQueue, pauseQueueItem, resumeQueueItem } from '../services/api';
-import { DownloadCloud, Trash2, XCircle, CheckCircle, Clock, Loader2, Pause, Play } from 'lucide-react';
+import { DownloadCloud, Trash2, XCircle, CheckCircle, Clock, Loader2, Pause, Play, HardDrive, Activity, FileVideo } from 'lucide-react';
 
 interface QueueItem {
   id: string;
@@ -40,7 +40,7 @@ export const Downloads: React.FC = () => {
 
   useEffect(() => {
     fetchQueue();
-    const interval = setInterval(fetchQueue, 2000); // Poll every 2 seconds
+    const interval = setInterval(fetchQueue, 2000);
     return () => clearInterval(interval);
   }, []);
 
@@ -50,7 +50,6 @@ export const Downloads: React.FC = () => {
       fetchQueue();
     } catch (err) {
       console.error('Failed to remove item', err);
-      alert('Failed to remove item');
     }
   };
 
@@ -81,191 +80,545 @@ export const Downloads: React.FC = () => {
     }
   };
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'completed': return <CheckCircle size={20} color="#10b981" />;
-      case 'failed': return <XCircle size={20} color="#ef4444" />;
-      case 'downloading': return <Loader2 size={20} color="#3b82f6" className="spin" />;
-      case 'paused': return <Pause size={20} color="#f59e0b" />;
-      case 'queued': return <Clock size={20} color="#f59e0b" />;
-      default: return <Clock size={20} color="var(--text-secondary)" />;
-    }
-  };
-
   if (loading && queue.length === 0) {
-    return <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}>Loading downloads...</div>;
+    return (
+      <div className="downloads-page">
+        <div className="downloads-loading">
+          <Loader2 size={32} className="dl-spin" />
+          <span>Loading downloads...</span>
+        </div>
+      </div>
+    );
   }
 
   const activeDownloads = queue.filter(q => q.status === 'downloading' || q.status === 'queued' || q.status === 'paused');
   const pastDownloads = queue.filter(q => q.status === 'completed' || q.status === 'failed');
 
+  const totalDownloaded = pastDownloads.filter(q => q.status === 'completed').length;
+  const totalFailed = pastDownloads.filter(q => q.status === 'failed').length;
+
   return (
-    <div style={{ maxWidth: '900px', margin: '0 auto', padding: '2rem' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <DownloadCloud size={28} color="var(--primary)" />
-          <h1 style={{ margin: 0 }}>Downloads</h1>
+    <div className="downloads-page">
+      <style dangerouslySetInnerHTML={{__html: `
+        .downloads-page {
+          max-width: 960px;
+          margin: 0 auto;
+          padding: 2rem 1.5rem;
+        }
+
+        .downloads-loading {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 1rem;
+          padding: 4rem;
+          color: var(--text-secondary);
+          font-size: 1.1rem;
+        }
+
+        .downloads-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 2rem;
+          padding-bottom: 1.5rem;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .downloads-header-left {
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+        }
+
+        .downloads-header-left h1 {
+          margin: 0;
+          font-size: 1.75rem;
+          font-weight: 700;
+          background: linear-gradient(135deg, #f8fafc, #94a3b8);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+        }
+
+        .downloads-icon-wrap {
+          width: 48px;
+          height: 48px;
+          border-radius: 12px;
+          background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(139, 92, 246, 0.2));
+          border: 1px solid rgba(59, 130, 246, 0.3);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .dl-stats {
+          display: flex;
+          gap: 1.5rem;
+          margin-bottom: 2rem;
+        }
+
+        .dl-stat-card {
+          flex: 1;
+          background: rgba(30, 41, 59, 0.5);
+          border: 1px solid rgba(255, 255, 255, 0.06);
+          border-radius: 12px;
+          padding: 1.25rem;
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+        }
+
+        .dl-stat-icon {
+          width: 40px;
+          height: 40px;
+          border-radius: 10px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .dl-stat-icon.active {
+          background: rgba(59, 130, 246, 0.15);
+          color: #3b82f6;
+        }
+
+        .dl-stat-icon.done {
+          background: rgba(16, 185, 129, 0.15);
+          color: #10b981;
+        }
+
+        .dl-stat-icon.fail {
+          background: rgba(239, 68, 68, 0.15);
+          color: #ef4444;
+        }
+
+        .dl-stat-value {
+          font-size: 1.5rem;
+          font-weight: 700;
+          line-height: 1;
+        }
+
+        .dl-stat-label {
+          font-size: 0.8rem;
+          color: var(--text-secondary);
+          margin-top: 0.2rem;
+        }
+
+        .dl-section-title {
+          font-size: 0.85rem;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          color: var(--text-secondary);
+          margin-bottom: 1rem;
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+        }
+
+        .dl-section-title .dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          display: inline-block;
+        }
+
+        .dl-section-title .dot.green { background: #10b981; box-shadow: 0 0 8px rgba(16, 185, 129, 0.5); }
+        .dl-section-title .dot.blue { background: #3b82f6; box-shadow: 0 0 8px rgba(59, 130, 246, 0.5); animation: dl-pulse 2s ease-in-out infinite; }
+
+        @keyframes dl-pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.4; }
+        }
+
+        .dl-item {
+          background: rgba(30, 41, 59, 0.4);
+          border: 1px solid rgba(255, 255, 255, 0.06);
+          border-radius: 12px;
+          padding: 1rem 1.25rem;
+          margin-bottom: 0.75rem;
+          transition: all 0.2s ease;
+        }
+
+        .dl-item:hover {
+          background: rgba(30, 41, 59, 0.6);
+          border-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .dl-item-top {
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+        }
+
+        .dl-item-status {
+          width: 36px;
+          height: 36px;
+          border-radius: 10px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+        }
+
+        .dl-item-status.downloading {
+          background: rgba(59, 130, 246, 0.15);
+        }
+        .dl-item-status.queued {
+          background: rgba(245, 158, 11, 0.15);
+        }
+        .dl-item-status.paused {
+          background: rgba(245, 158, 11, 0.15);
+        }
+        .dl-item-status.completed {
+          background: rgba(16, 185, 129, 0.15);
+        }
+        .dl-item-status.failed {
+          background: rgba(239, 68, 68, 0.15);
+        }
+
+        .dl-item-info {
+          flex: 1;
+          min-width: 0;
+        }
+
+        .dl-item-name {
+          font-weight: 600;
+          font-size: 0.95rem;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          margin-bottom: 0.2rem;
+        }
+
+        .dl-item-meta {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          font-size: 0.8rem;
+          color: var(--text-secondary);
+          flex-wrap: wrap;
+        }
+
+        .dl-item-meta .dl-tag {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.3rem;
+          padding: 0.15rem 0.5rem;
+          border-radius: 6px;
+          background: rgba(255, 255, 255, 0.05);
+          font-size: 0.75rem;
+        }
+
+        .dl-item-meta .dl-tag.size {
+          background: rgba(59, 130, 246, 0.1);
+          color: #60a5fa;
+        }
+
+        .dl-item-meta .dl-tag.error {
+          background: rgba(239, 68, 68, 0.1);
+          color: #f87171;
+        }
+
+        .dl-item-meta .dl-path {
+          opacity: 0.6;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          max-width: 350px;
+        }
+
+        .dl-item-progress {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          margin-top: 0.75rem;
+        }
+
+        .dl-progress-bar {
+          flex: 1;
+          height: 4px;
+          background: rgba(255, 255, 255, 0.06);
+          border-radius: 4px;
+          overflow: hidden;
+        }
+
+        .dl-progress-fill {
+          height: 100%;
+          background: linear-gradient(90deg, #3b82f6, #60a5fa);
+          border-radius: 4px;
+          transition: width 0.5s ease;
+        }
+
+        .dl-progress-pct {
+          font-size: 0.8rem;
+          font-weight: 700;
+          color: #60a5fa;
+          min-width: 40px;
+          text-align: right;
+        }
+
+        .dl-item-actions {
+          display: flex;
+          align-items: center;
+          gap: 0.25rem;
+          flex-shrink: 0;
+        }
+
+        .dl-action-btn {
+          width: 32px;
+          height: 32px;
+          border-radius: 8px;
+          background: transparent;
+          border: none;
+          color: var(--text-secondary);
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.2s ease;
+        }
+
+        .dl-action-btn:hover {
+          background: rgba(255, 255, 255, 0.08);
+          color: var(--text-primary);
+        }
+
+        .dl-action-btn.resume:hover {
+          background: rgba(16, 185, 129, 0.15);
+          color: #10b981;
+        }
+
+        .dl-action-btn.danger:hover {
+          background: rgba(239, 68, 68, 0.15);
+          color: #ef4444;
+        }
+
+        .dl-empty {
+          padding: 4rem 2rem;
+          text-align: center;
+          background: rgba(30, 41, 59, 0.3);
+          border: 1px dashed rgba(255, 255, 255, 0.1);
+          border-radius: 16px;
+        }
+
+        .dl-empty-icon {
+          width: 72px;
+          height: 72px;
+          border-radius: 20px;
+          background: rgba(59, 130, 246, 0.1);
+          margin: 0 auto 1.5rem;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .dl-empty h3 {
+          margin-bottom: 0.5rem;
+          font-size: 1.2rem;
+        }
+
+        .dl-empty p {
+          color: var(--text-secondary);
+          font-size: 0.95rem;
+        }
+
+        .dl-clear-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.5rem;
+          padding: 0.5rem 1rem;
+          border-radius: 8px;
+          background: rgba(255, 255, 255, 0.05);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          color: var(--text-secondary);
+          font-size: 0.85rem;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+
+        .dl-clear-btn:hover {
+          background: rgba(239, 68, 68, 0.1);
+          border-color: rgba(239, 68, 68, 0.3);
+          color: #f87171;
+        }
+
+        @keyframes dl-spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        .dl-spin {
+          animation: dl-spin 1.5s linear infinite;
+        }
+
+        .dl-section {
+          margin-bottom: 2.5rem;
+        }
+
+        .dl-item.completed-item {
+          opacity: 0.7;
+        }
+        .dl-item.completed-item:hover {
+          opacity: 0.9;
+        }
+      `}} />
+
+      {/* Header */}
+      <div className="downloads-header">
+        <div className="downloads-header-left">
+          <div className="downloads-icon-wrap">
+            <DownloadCloud size={24} color="#3b82f6" />
+          </div>
+          <h1>Downloads</h1>
         </div>
-        
         {pastDownloads.length > 0 && (
-          <button className="btn btn-secondary" onClick={handleClearCompleted}>
-            <Trash2 size={16} />
-            Clear Completed
+          <button className="dl-clear-btn" onClick={handleClearCompleted}>
+            <Trash2 size={14} />
+            Clear History
           </button>
         )}
       </div>
 
-      <style dangerouslySetInnerHTML={{__html: `
-        .queue-item {
-          background: var(--bg-primary);
-          border-radius: var(--radius-md);
-          padding: 1rem 1.5rem;
-          margin-bottom: 1rem;
-          display: flex;
-          align-items: center;
-          gap: 1.5rem;
-          box-shadow: var(--shadow-sm);
-        }
-        .queue-info {
-          flex: 1;
-          min-width: 0;
-        }
-        .queue-title {
-          font-weight: 600;
-          margin-bottom: 0.25rem;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-        .queue-meta {
-          font-size: 0.85rem;
-          color: var(--text-secondary);
-          display: flex;
-          gap: 1rem;
-          flex-wrap: wrap;
-        }
-        .progress-bar-bg {
-          height: 6px;
-          background: var(--bg-secondary);
-          border-radius: 3px;
-          margin-top: 0.75rem;
-          overflow: hidden;
-        }
-        .progress-bar-fill {
-          height: 100%;
-          background: var(--primary);
-          transition: width 0.3s ease;
-        }
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-        .spin {
-          animation: spin 2s linear infinite;
-        }
-        .queue-actions {
-          display: flex;
-          align-items: center;
-          gap: 0.25rem;
-        }
-        .queue-actions button {
-          background: transparent;
-          border: none;
-          padding: 0.5rem;
-          cursor: pointer;
-          color: var(--text-secondary);
-          border-radius: var(--radius-sm);
-          transition: color 0.2s, background 0.2s;
-        }
-        .queue-actions button:hover {
-          color: var(--text-primary);
-          background: var(--bg-secondary);
-        }
-      `}} />
+      {/* Stats */}
+      {queue.length > 0 && (
+        <div className="dl-stats">
+          <div className="dl-stat-card">
+            <div className="dl-stat-icon active">
+              <Activity size={20} />
+            </div>
+            <div>
+              <div className="dl-stat-value">{activeDownloads.length}</div>
+              <div className="dl-stat-label">Active</div>
+            </div>
+          </div>
+          <div className="dl-stat-card">
+            <div className="dl-stat-icon done">
+              <CheckCircle size={20} />
+            </div>
+            <div>
+              <div className="dl-stat-value">{totalDownloaded}</div>
+              <div className="dl-stat-label">Completed</div>
+            </div>
+          </div>
+          <div className="dl-stat-card">
+            <div className="dl-stat-icon fail">
+              <XCircle size={20} />
+            </div>
+            <div>
+              <div className="dl-stat-value">{totalFailed}</div>
+              <div className="dl-stat-label">Failed</div>
+            </div>
+          </div>
+        </div>
+      )}
 
+      {/* Empty State */}
       {queue.length === 0 ? (
-        <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-secondary)', background: 'var(--bg-primary)', borderRadius: 'var(--radius-md)' }}>
-          <DownloadCloud size={48} style={{ opacity: 0.2, marginBottom: '1rem' }} />
-          <h3>No downloads in queue</h3>
-          <p>Go to Movies or Series to add items to your download queue.</p>
+        <div className="dl-empty">
+          <div className="dl-empty-icon">
+            <DownloadCloud size={32} color="#3b82f6" />
+          </div>
+          <h3>No downloads yet</h3>
+          <p>Browse Movies or Series to start downloading content.</p>
         </div>
       ) : (
         <>
+          {/* Active Downloads */}
           {activeDownloads.length > 0 && (
-            <div style={{ marginBottom: '3rem' }}>
-              <h3 style={{ marginBottom: '1rem', color: 'var(--text-secondary)' }}>Active ({activeDownloads.length})</h3>
+            <div className="dl-section">
+              <div className="dl-section-title">
+                <span className="dot blue"></span>
+                Active Downloads ({activeDownloads.length})
+              </div>
               {activeDownloads.map(item => (
-                <div key={item.id} className="queue-item">
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px' }}>
-                    {getStatusIcon(item.status)}
-                  </div>
-                  <div className="queue-info">
-                    <div className="queue-title" title={item.filename}>{item.filename}</div>
-                    <div className="queue-meta">
-                      <span>
-                        {item.status === 'paused' ? 'Paused' : item.status.charAt(0).toUpperCase() + item.status.slice(1)}
-                      </span>
-                      {item.status === 'downloading' && item.downloadedBytes != null && (
-                        <span>
-                          {formatBytes(item.downloadedBytes)}
-                          {item.totalBytes ? ` / ${formatBytes(item.totalBytes)}` : ''}
-                        </span>
-                      )}
-                      <span style={{ opacity: 0.7 }}>Target: {item.location}</span>
+                <div key={item.id} className="dl-item">
+                  <div className="dl-item-top">
+                    <div className={`dl-item-status ${item.status}`}>
+                      {item.status === 'downloading' && <Loader2 size={18} color="#3b82f6" className="dl-spin" />}
+                      {item.status === 'queued' && <Clock size={18} color="#f59e0b" />}
+                      {item.status === 'paused' && <Pause size={18} color="#f59e0b" />}
                     </div>
-                    {item.status === 'downloading' && (
-                      <div className="progress-bar-bg">
-                        <div className="progress-bar-fill" style={{ width: `${item.progress}%` }}></div>
+                    <div className="dl-item-info">
+                      <div className="dl-item-name" title={item.filename}>
+                        {item.filename}
                       </div>
-                    )}
-                  </div>
-                  <div style={{ minWidth: '50px', textAlign: 'right', fontWeight: 'bold', color: 'var(--primary)', fontSize: '0.9rem' }}>
-                    {item.status === 'downloading' ? `${item.progress}%` : ''}
-                  </div>
-                  <div className="queue-actions">
-                    {(item.status === 'downloading' || item.status === 'queued') && (
-                      <button onClick={() => handlePause(item.id)} title="Pause Download">
-                        <Pause size={18} />
+                      <div className="dl-item-meta">
+                        {(item.downloadedBytes || item.totalBytes) ? (
+                          <span className="dl-tag size">
+                            <HardDrive size={12} />
+                            {item.downloadedBytes ? formatBytes(item.downloadedBytes) : '0 B'}
+                            {item.totalBytes ? ` / ${formatBytes(item.totalBytes)}` : ''}
+                          </span>
+                        ) : null}
+                        <span className="dl-path">{item.location}</span>
+                      </div>
+                    </div>
+                    <div className="dl-item-actions">
+                      {(item.status === 'downloading' || item.status === 'queued') && (
+                        <button className="dl-action-btn" onClick={() => handlePause(item.id)} title="Pause">
+                          <Pause size={16} />
+                        </button>
+                      )}
+                      {item.status === 'paused' && (
+                        <button className="dl-action-btn resume" onClick={() => handleResume(item.id)} title="Resume">
+                          <Play size={16} />
+                        </button>
+                      )}
+                      <button className="dl-action-btn danger" onClick={() => handleRemove(item.id)} title="Cancel">
+                        <XCircle size={16} />
                       </button>
-                    )}
-                    {item.status === 'paused' && (
-                      <button onClick={() => handleResume(item.id)} title="Resume Download" style={{ color: '#10b981' }}>
-                        <Play size={18} />
-                      </button>
-                    )}
-                    <button onClick={() => handleRemove(item.id)} title="Cancel Download">
-                      <XCircle size={18} />
-                    </button>
+                    </div>
                   </div>
+                  {item.status === 'downloading' && (
+                    <div className="dl-item-progress">
+                      <div className="dl-progress-bar">
+                        <div className="dl-progress-fill" style={{ width: `${item.progress}%` }}></div>
+                      </div>
+                      <span className="dl-progress-pct">{item.progress}%</span>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
           )}
 
+          {/* Completed / Failed */}
           {pastDownloads.length > 0 && (
-            <div>
-              <h3 style={{ marginBottom: '1rem', color: 'var(--text-secondary)' }}>Completed & Failed ({pastDownloads.length})</h3>
+            <div className="dl-section">
+              <div className="dl-section-title">
+                <span className="dot green"></span>
+                History ({pastDownloads.length})
+              </div>
               {pastDownloads.map(item => (
-                <div key={item.id} className="queue-item" style={{ opacity: item.status === 'completed' ? 0.8 : 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px' }}>
-                    {getStatusIcon(item.status)}
-                  </div>
-                  <div className="queue-info">
-                    <div className="queue-title" title={item.filename} style={{ textDecoration: item.status === 'completed' ? 'line-through' : 'none' }}>
-                      {item.filename}
+                <div key={item.id} className={`dl-item ${item.status === 'completed' ? 'completed-item' : ''}`}>
+                  <div className="dl-item-top">
+                    <div className={`dl-item-status ${item.status}`}>
+                      {item.status === 'completed' && <CheckCircle size={18} color="#10b981" />}
+                      {item.status === 'failed' && <XCircle size={18} color="#ef4444" />}
                     </div>
-                    <div className="queue-meta">
-                      <span>Target: {item.location}</span>
-                      {item.totalBytes && item.totalBytes > 0 && (
-                        <span>{formatBytes(item.totalBytes)}</span>
-                      )}
-                      {item.error && <span style={{ color: '#ef4444' }}>Error: {item.error}</span>}
+                    <div className="dl-item-info">
+                      <div className="dl-item-name" title={item.filename}>
+                        {item.filename}
+                      </div>
+                      <div className="dl-item-meta">
+                        {item.totalBytes && item.totalBytes > 0 && (
+                          <span className="dl-tag size">
+                            <FileVideo size={12} />
+                            {formatBytes(item.totalBytes)}
+                          </span>
+                        )}
+                        {item.error && (
+                          <span className="dl-tag error">{item.error}</span>
+                        )}
+                        <span className="dl-path">{item.location}</span>
+                      </div>
                     </div>
-                  </div>
-                  <div className="queue-actions">
-                    <button onClick={() => handleRemove(item.id)} title="Remove from history">
-                      <XCircle size={18} />
-                    </button>
+                    <div className="dl-item-actions">
+                      <button className="dl-action-btn danger" onClick={() => handleRemove(item.id)} title="Remove">
+                        <XCircle size={16} />
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
