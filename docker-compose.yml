@@ -1,14 +1,12 @@
-version: '3.8'
-
 services:
   xtream-downloader:
-    build: .
+    image: ghcr.io/devwael/xtream-downloader:latest
     container_name: xtream-downloader
     restart: unless-stopped
     ports:
       - "8945:8080"
     environment:
-      - XTREAM_URL=http://your-iptv-provider.com:port
+      - XTREAM_URL=http://your-provider:port
       - XTREAM_USERNAME=your_username
       - XTREAM_PASSWORD=your_password
       - CONFIG_DIR=/config
@@ -17,9 +15,10 @@ services:
       # Persistent configuration and download queue state
       - ./config:/config
       
-      # Example media volumes (Add these paths in the App Settings UI)
+      # Media volumes — adjust paths to match your system
+      # On TrueNAS, use dataset paths like /mnt/Storage/media/movies
       - /mnt/Storage/media/movies:/movies
-      - /mnt/Storage/media/series:/series
+      - /mnt/Storage/media/cartoon:/cartoon
       
     labels:
       org.truenas.webui.port: "8945"
