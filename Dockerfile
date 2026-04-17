@@ -26,10 +26,5 @@ EXPOSE 8080
 # Create required directories for persistent storage
 RUN mkdir -p /config
 
-# Ensure node has access to /config
-RUN chown -R node:node /config
-
-USER node
-
 # Start the Node.js express server
 CMD ["node", "server.js"]

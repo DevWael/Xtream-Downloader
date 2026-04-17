@@ -120,9 +120,43 @@ app.get('/api/config', (req, res) => {
     url: process.env.XTREAM_URL || null,
     username: process.env.XTREAM_USERNAME || null,
     password: process.env.XTREAM_PASSWORD || null,
-    password: process.env.XTREAM_PASSWORD || null,
     hasServerDownload: settings.locations && settings.locations.length > 0
   });
+});
+
+// Server-side API cache (2 hour TTL)
+const apiCache = new Map();
+const CACHE_TTL = 2 * 60 * 60 * 1000;
+
+const getCacheKey = (url) => {
+  try {
+    const u = new URL(url);
+    // Cache key from action + params, excluding credentials
+    const action = u.searchParams.get('action') || '';
+    const params = [...u.searchParams.entries()]
+      .filter(([k]) => !['username', 'password'].includes(k))
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([k, v]) => `${k}=${v}`)
+      .join('&');
+    return `${u.pathname}?${params}`;
+  } catch {
+    return null;
+  }
+};
+
+const isCacheableRequest = (url) => {
+  return url.includes('player_api.php');
+};
+
+// Clear cache endpoint
+app.delete('/api/cache', (req, res) => {
+  apiCache.clear();
+  console.log('[Cache] Cache cleared');
+  res.json({ success: true });
+});
+
+app.get('/api/cache/stats', (req, res) => {
+  res.json({ entries: apiCache.size });
 });
 
 app.use('/api/proxy', (req, res) => {
@@ -134,17 +168,47 @@ app.use('/api/proxy', (req, res) => {
       return res.status(400).send('Missing target url');
     }
 
+    // Check server-side cache
+    const cacheKey = getCacheKey(targetUrlStr);
+    if (cacheKey && isCacheableRequest(targetUrlStr)) {
+      const cached = apiCache.get(cacheKey);
+      if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+        console.log(`[Cache] HIT: ${cacheKey.substring(0, 80)}`);
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('X-Cache', 'HIT');
+        return res.send(cached.data);
+      }
+    }
+
     const targetUrl = new URL(targetUrlStr);
     const client = targetUrl.protocol === 'https:' ? https : http;
 
     client.get(targetUrl, (upstreamRes) => {
-      res.status(upstreamRes.statusCode || 200);
+      const statusCode = upstreamRes.statusCode || 200;
+
+      // If cacheable, buffer the response to store in cache
+      if (cacheKey && isCacheableRequest(targetUrlStr) && statusCode === 200) {
+        let data = '';
+        upstreamRes.on('data', chunk => data += chunk);
+        upstreamRes.on('end', () => {
+          apiCache.set(cacheKey, { data, timestamp: Date.now() });
+          console.log(`[Cache] STORE: ${cacheKey.substring(0, 80)} (${apiCache.size} entries)`);
+          res.status(statusCode);
+          res.setHeader('Content-Type', upstreamRes.headers['content-type'] || 'application/json');
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('X-Cache', 'MISS');
+          res.send(data);
+        });
+        return;
+      }
+
+      // Non-cacheable: stream directly
+      res.status(statusCode);
       Object.entries(upstreamRes.headers).forEach(([key, value]) => {
         if (value && !['transfer-encoding'].includes(key.toLowerCase())) {
           res.setHeader(key, value);
         }
       });
-      // Force CORS headers on the proxy response
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
       
@@ -166,7 +230,13 @@ try {
   if (!fs.existsSync(actualConfigDir)) {
     fs.mkdirSync(actualConfigDir, { recursive: true });
   }
+  // Test write permissions
+  const testFile = path.join(actualConfigDir, '.write-test');
+  fs.writeFileSync(testFile, 'ok');
+  fs.unlinkSync(testFile);
+  console.log(`[Config] Using config directory: ${actualConfigDir} (writable)`);
 } catch (e) {
+  console.error(`[Config] WARNING: ${actualConfigDir} is not writable (${e.message}). Falling back to local ./config`);
   actualConfigDir = path.join(__dirname, 'config');
   if (!fs.existsSync(actualConfigDir)) {
     fs.mkdirSync(actualConfigDir, { recursive: true });
@@ -188,12 +258,25 @@ try {
   downloadQueue.forEach(item => {
     if (item.status === 'downloading') item.status = 'queued';
   });
+  console.log(`[Config] Loaded ${settings.locations?.length || 0} locations, ${downloadQueue.length} queue items`);
 } catch (e) {
-  console.error("Failed to load config files", e);
+  console.error('[Config] Failed to load config files:', e.message);
 }
 
-const saveSettings = () => fs.writeFileSync(getSettingsFile(), JSON.stringify(settings, null, 2));
-const saveQueue = () => fs.writeFileSync(getQueueFile(), JSON.stringify(downloadQueue, null, 2));
+const saveSettings = () => {
+  try {
+    fs.writeFileSync(getSettingsFile(), JSON.stringify(settings, null, 2));
+  } catch (e) {
+    console.error('[Config] ERROR: Failed to save settings:', e.message);
+  }
+};
+const saveQueue = () => {
+  try {
+    fs.writeFileSync(getQueueFile(), JSON.stringify(downloadQueue, null, 2));
+  } catch (e) {
+    console.error('[Config] ERROR: Failed to save queue:', e.message);
+  }
+};
 
 // Background Queue Processor
 const processQueue = () => {

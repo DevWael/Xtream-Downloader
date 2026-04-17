@@ -65,24 +65,10 @@ export interface SeriesInfo {
   episodes: Record<string, SeriesEpisode[]>;
 }
 
-interface CacheEntry {
-  data: any;
-  timestamp: number;
-}
-
-const apiCache = new Map<string, CacheEntry>();
-const CACHE_TTL = 2 * 60 * 60 * 1000; // 2 hours
-
 export const fetchFromApi = async (action: string, extraParams: Record<string, string> = {}) => {
   const config = getStoredAuthConfig();
   if (!config) {
     throw new Error('Not authenticated');
-  }
-
-  const cacheKey = `${action}_${JSON.stringify(extraParams)}`;
-  const cached = apiCache.get(cacheKey);
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    return cached.data;
   }
 
   // Ensure host doesn't end with a slash
@@ -103,9 +89,7 @@ export const fetchFromApi = async (action: string, extraParams: Record<string, s
     throw new Error(`API error: ${response.statusText}`);
   }
   
-  const data = await response.json();
-  apiCache.set(cacheKey, { data, timestamp: Date.now() });
-  return data;
+  return response.json();
 };
 
 export const getVodCategories = async (): Promise<Category[]> => {
