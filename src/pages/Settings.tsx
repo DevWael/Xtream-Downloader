@@ -23,6 +23,8 @@ const THEMES = [
   { id: 'arctic',   label: 'Arctic',   value: 'arctic',   colors: ['#0c1222', '#38bdf8'] },
   { id: 'carbon',   label: 'Carbon',   value: 'carbon',   colors: ['#121212', '#78716c'] },
   { id: 'sapphire', label: 'Sapphire', value: 'sapphire', colors: ['#0c0a2a', '#6366f1'] },
+  { id: 'dracula',  label: 'Dracula',  value: 'dracula',  colors: ['#181825', '#f38ba8'] },
+  { id: 'aurora',   label: 'Aurora',   value: 'aurora',   colors: ['#0d1117', '#56d364'] },
 ];
 
 export const Settings: React.FC = () => {

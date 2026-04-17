@@ -313,6 +313,52 @@
   --nav-active-bg: rgba(99, 102, 241, 0.2);
 }
 
+/* Theme: Dracula — dark with pink/magenta accents */
+[data-theme="dracula"] {
+  --bg-color: #181825;
+  --bg-rgb: 24, 24, 37;
+  --bg-gradient: radial-gradient(circle at 50% 0%, #1e1e2e, #181825);
+  --primary-color: #f38ba8;
+  --primary-rgb: 243, 139, 168;
+  --primary-hover: #eba0ac;
+  --primary-dark: #e06c8e;
+  --primary-light: #f5c2d0;
+  --background: #181825;
+  --surface: #1e1e2e;
+  --surface-rgb: 30, 30, 46;
+  --surface-light: #313244;
+  --secondary-bg: rgba(30, 30, 46, 0.7);
+  --text-secondary: #bac2de;
+  --card-bg: rgba(30, 30, 46, 0.5);
+  --card-hover: rgba(30, 30, 46, 0.9);
+  --shadow-glow: 0 0 15px rgba(243, 139, 168, 0.4);
+  --accent-gradient: linear-gradient(135deg, #f38ba8, #cba6f7);
+  --nav-active-bg: rgba(243, 139, 168, 0.15);
+}
+
+/* Theme: Aurora — dark with northern lights green-cyan */
+[data-theme="aurora"] {
+  --bg-color: #0d1117;
+  --bg-rgb: 13, 17, 23;
+  --bg-gradient: radial-gradient(circle at 50% 0%, #161b22, #0d1117);
+  --primary-color: #56d364;
+  --primary-rgb: 86, 211, 100;
+  --primary-hover: #3fb950;
+  --primary-dark: #3fb950;
+  --primary-light: #7ee787;
+  --background: #0d1117;
+  --surface: #161b22;
+  --surface-rgb: 22, 27, 34;
+  --surface-light: #21262d;
+  --secondary-bg: rgba(22, 27, 34, 0.7);
+  --text-secondary: #8b949e;
+  --card-bg: rgba(22, 27, 34, 0.5);
+  --card-hover: rgba(22, 27, 34, 0.9);
+  --shadow-glow: 0 0 15px rgba(86, 211, 100, 0.4);
+  --accent-gradient: linear-gradient(135deg, #56d364, #58a6ff);
+  --nav-active-bg: rgba(86, 211, 100, 0.15);
+}
+
 * {
   margin: 0;
   padding: 0;
