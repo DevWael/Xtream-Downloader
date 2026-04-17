@@ -16,7 +16,7 @@
     "filename": "Phantom Lawyer - S1E1 - S01 E01.mp4",
     "location": "/Users/ahmadwael/Downloads/xtream/Phantom Lawyer",
     "status": "paused",
-    "progress": 52,
+    "progress": 97,
     "addedAt": "2026-04-17T21:46:48.599Z",
     "downloadedBytes": 0
   },
@@ -25,8 +25,8 @@
     "url": "http://mhiptv.info:2095/series/01063604029/01100602403/271048.mkv",
     "filename": "Phantom Lawyer - S1E2 - S01 E02.mp4",
     "location": "/Users/ahmadwael/Downloads/xtream/Phantom Lawyer",
-    "status": "paused",
-    "progress": 76,
+    "status": "completed",
+    "progress": 100,
     "addedAt": "2026-04-17T21:46:48.610Z",
     "downloadedBytes": 0
   },
@@ -36,7 +36,7 @@
     "filename": "Phantom Lawyer - S1E3 - S01 E03.mp4",
     "location": "/Users/ahmadwael/Downloads/xtream/Phantom Lawyer",
     "status": "paused",
-    "progress": 55,
+    "progress": 99,
     "addedAt": "2026-04-17T21:46:48.627Z",
     "downloadedBytes": 0
   },

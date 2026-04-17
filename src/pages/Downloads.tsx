@@ -159,7 +159,7 @@ export const Downloads: React.FC = () => {
 
         .dl-stat-card {
           flex: 1;
-          background: rgba(30, 41, 59, 0.5);
+          background: rgba(var(--surface-rgb), 0.5);
           border: 1px solid rgba(255, 255, 255, 0.06);
           border-radius: 12px;
           padding: 1.25rem;
@@ -232,7 +232,7 @@ export const Downloads: React.FC = () => {
         }
 
         .dl-item {
-          background: rgba(30, 41, 59, 0.4);
+          background: rgba(var(--surface-rgb), 0.4);
           border: 1px solid rgba(255, 255, 255, 0.06);
           border-radius: 12px;
           padding: 1rem 1.25rem;
@@ -241,7 +241,7 @@ export const Downloads: React.FC = () => {
         }
 
         .dl-item:hover {
-          background: rgba(30, 41, 59, 0.6);
+          background: rgba(var(--surface-rgb), 0.6);
           border-color: rgba(255, 255, 255, 0.1);
         }
 
@@ -397,7 +397,7 @@ export const Downloads: React.FC = () => {
         .dl-empty {
           padding: 4rem 2rem;
           text-align: center;
-          background: rgba(30, 41, 59, 0.3);
+          background: rgba(var(--surface-rgb), 0.3);
           border: 1px dashed rgba(255, 255, 255, 0.1);
           border-radius: 16px;
         }

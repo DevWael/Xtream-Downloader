@@ -10,13 +10,13 @@ interface Location {
 }
 
 const THEMES = [
-  { id: 'ocean',   label: 'Ocean',   value: '',        colors: ['#3b82f6', '#2563eb'] },
-  { id: 'emerald', label: 'Emerald', value: 'emerald', colors: ['#10b981', '#059669'] },
-  { id: 'purple',  label: 'Purple',  value: 'purple',  colors: ['#8b5cf6', '#7c3aed'] },
-  { id: 'rose',    label: 'Rose',    value: 'rose',    colors: ['#f43f5e', '#e11d48'] },
-  { id: 'amber',   label: 'Amber',   value: 'amber',   colors: ['#f59e0b', '#d97706'] },
-  { id: 'cyan',    label: 'Cyan',    value: 'cyan',    colors: ['#06b6d4', '#0891b2'] },
-  { id: 'slate',   label: 'Slate',   value: 'slate',   colors: ['#6b7280', '#4b5563'] },
+  { id: 'ocean',   label: 'Ocean',   value: '',        colors: ['#0f172a', '#3b82f6'] },
+  { id: 'emerald', label: 'Emerald', value: 'emerald', colors: ['#022c22', '#10b981'] },
+  { id: 'purple',  label: 'Purple',  value: 'purple',  colors: ['#13052e', '#8b5cf6'] },
+  { id: 'rose',    label: 'Rose',    value: 'rose',    colors: ['#1c0a12', '#f43f5e'] },
+  { id: 'amber',   label: 'Amber',   value: 'amber',   colors: ['#1c1002', '#f59e0b'] },
+  { id: 'cyan',    label: 'Cyan',    value: 'cyan',    colors: ['#042f2e', '#06b6d4'] },
+  { id: 'slate',   label: 'Slate',   value: 'slate',   colors: ['#111111', '#a1a1aa'] },
 ];
 
 export const Settings: React.FC = () => {
@@ -131,7 +131,7 @@ export const Settings: React.FC = () => {
         }
 
         .settings-section {
-          background: rgba(30, 41, 59, 0.4);
+          background: rgba(var(--surface-rgb), 0.4);
           border: 1px solid rgba(255, 255, 255, 0.06);
           border-radius: 16px;
           padding: 1.75rem;
@@ -168,7 +168,7 @@ export const Settings: React.FC = () => {
           cursor: pointer;
           border: 2px solid rgba(255, 255, 255, 0.06);
           transition: all 0.25s ease;
-          background: rgba(30, 41, 59, 0.3);
+          background: rgba(var(--surface-rgb), 0.3);
         }
 
         .theme-swatch:hover {
@@ -257,7 +257,7 @@ export const Settings: React.FC = () => {
         .location-field input {
           width: 100%;
           padding: 0.6rem 0.85rem;
-          background: rgba(15, 23, 42, 0.6);
+          background: rgba(var(--bg-rgb), 0.6);
           border: 1px solid rgba(255, 255, 255, 0.1);
           border-radius: 8px;
           color: var(--text-primary);
@@ -300,7 +300,7 @@ export const Settings: React.FC = () => {
         .locations-empty {
           padding: 2rem;
           text-align: center;
-          background: rgba(15, 23, 42, 0.4);
+          background: rgba(var(--bg-rgb), 0.4);
           border: 1px dashed rgba(255, 255, 255, 0.1);
           border-radius: 12px;
           color: var(--text-secondary);
