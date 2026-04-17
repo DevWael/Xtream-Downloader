@@ -222,3 +222,23 @@ export const clearCompletedQueue = async () => {
   if (!res.ok) throw new Error('Failed to clear queue');
   return res.json();
 };
+
+export const pauseQueueItem = async (id: string) => {
+  const res = await fetch(`/api/queue/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'pause' })
+  });
+  if (!res.ok) throw new Error('Failed to pause item');
+  return res.json();
+};
+
+export const resumeQueueItem = async (id: string) => {
+  const res = await fetch(`/api/queue/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'resume' })
+  });
+  if (!res.ok) throw new Error('Failed to resume item');
+  return res.json();
+};

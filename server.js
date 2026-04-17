@@ -178,6 +178,7 @@ const getQueueFile = () => path.join(actualConfigDir, 'queue.json');
 let settings = { locations: [] };
 let downloadQueue = [];
 let currentDownloadReq = null; // Store the current HTTP request to allow cancellation
+let currentDownloadingId = null; // Track which item is downloading
 
 try {
   if (fs.existsSync(getSettingsFile())) settings = JSON.parse(fs.readFileSync(getSettingsFile(), 'utf-8'));
@@ -199,6 +200,9 @@ const processQueue = () => {
   if (currentDownloadReq !== null) return; // Already downloading
   const nextItem = downloadQueue.find(item => item.status === 'queued');
   if (!nextItem) return;
+
+  // Track current downloading item ID for pause support
+  currentDownloadingId = nextItem.id;
 
   currentDownloadReq = "starting"; // Lock
   nextItem.status = 'downloading';
@@ -344,6 +348,8 @@ const processQueue = () => {
       // Normal direct file download
       const totalBytes = parseInt(res.headers['content-length'] || '0', 10);
       let downloadedBytes = 0;
+      nextItem.totalBytes = totalBytes;
+      nextItem.downloadedBytes = 0;
       
       const fileStream = fs.createWriteStream(filePath);
       res.pipe(fileStream);
@@ -351,6 +357,7 @@ const processQueue = () => {
       let lastSave = Date.now();
       res.on('data', (chunk) => {
         downloadedBytes += chunk.length;
+        nextItem.downloadedBytes = downloadedBytes;
         if (totalBytes) {
           nextItem.progress = Math.round((downloadedBytes / totalBytes) * 100);
           // Throttle saveQueue to avoid disk thrashing
@@ -366,6 +373,7 @@ const processQueue = () => {
         nextItem.status = 'completed';
         nextItem.progress = 100;
         currentDownloadReq = null;
+        currentDownloadingId = null;
         saveQueue();
         processQueue();
       });
@@ -375,6 +383,7 @@ const processQueue = () => {
         nextItem.status = 'failed';
         nextItem.error = err.message;
         currentDownloadReq = null;
+        currentDownloadingId = null;
         saveQueue();
         processQueue();
       });
@@ -382,6 +391,7 @@ const processQueue = () => {
       nextItem.status = 'failed';
       nextItem.error = err.message;
       currentDownloadReq = null;
+      currentDownloadingId = null;
       saveQueue();
       processQueue();
     });
@@ -446,6 +456,7 @@ app.delete('/api/queue/:id', (req, res) => {
       currentDownloadReq.destroy();
     }
     currentDownloadReq = null;
+    currentDownloadingId = null;
     const filePath = path.join(item.location, item.filename);
     if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
     
@@ -460,9 +471,49 @@ app.delete('/api/queue/:id', (req, res) => {
 
 app.delete('/api/queue', (req, res) => {
   // Clear completed and failed
-  downloadQueue = downloadQueue.filter(item => item.status === 'queued' || item.status === 'downloading');
+  downloadQueue = downloadQueue.filter(item => item.status === 'queued' || item.status === 'downloading' || item.status === 'paused');
   saveQueue();
   res.json({ success: true });
+});
+
+// Pause/Resume endpoint
+app.patch('/api/queue/:id', (req, res) => {
+  const { id } = req.params;
+  const { action } = req.body;
+  const item = downloadQueue.find(i => i.id === id);
+  if (!item) return res.status(404).json({ error: 'Not found' });
+
+  if (action === 'pause') {
+    if (item.status === 'downloading') {
+      // Abort active download
+      if (currentDownloadReq && typeof currentDownloadReq.destroy === 'function') {
+        currentDownloadReq.destroy();
+      }
+      currentDownloadReq = null;
+      currentDownloadingId = null;
+      // Delete partial file
+      const filePath = path.join(item.location, item.filename);
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    }
+    item.status = 'paused';
+    item.progress = 0;
+    item.downloadedBytes = 0;
+    saveQueue();
+    setTimeout(processQueue, 500);
+    return res.json({ success: true });
+  }
+
+  if (action === 'resume') {
+    if (item.status === 'paused') {
+      item.status = 'queued';
+      item.error = undefined;
+      saveQueue();
+      setTimeout(processQueue, 500);
+    }
+    return res.json({ success: true });
+  }
+
+  res.status(400).json({ error: 'Invalid action' });
 });
 
 app.use('/api/download', (req, res) => {

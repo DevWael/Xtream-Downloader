@@ -1,17 +1,27 @@
 import React, { useEffect, useState } from 'react';
-import { getQueue, removeQueueItem, clearCompletedQueue } from '../services/api';
-import { DownloadCloud, Trash2, XCircle, CheckCircle, Clock, Loader2 } from 'lucide-react';
+import { getQueue, removeQueueItem, clearCompletedQueue, pauseQueueItem, resumeQueueItem } from '../services/api';
+import { DownloadCloud, Trash2, XCircle, CheckCircle, Clock, Loader2, Pause, Play } from 'lucide-react';
 
 interface QueueItem {
   id: string;
   url: string;
   filename: string;
   location: string;
-  status: 'queued' | 'downloading' | 'completed' | 'failed';
+  status: 'queued' | 'downloading' | 'completed' | 'failed' | 'paused';
   progress: number;
   addedAt: string;
   error?: string;
+  totalBytes?: number;
+  downloadedBytes?: number;
 }
+
+const formatBytes = (bytes: number): string => {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${(bytes / Math.pow(k, i)).toFixed(i > 1 ? 1 : 0)} ${sizes[i]}`;
+};
 
 export const Downloads: React.FC = () => {
   const [queue, setQueue] = useState<QueueItem[]>([]);
@@ -53,11 +63,30 @@ export const Downloads: React.FC = () => {
     }
   };
 
+  const handlePause = async (id: string) => {
+    try {
+      await pauseQueueItem(id);
+      fetchQueue();
+    } catch (err) {
+      console.error('Failed to pause', err);
+    }
+  };
+
+  const handleResume = async (id: string) => {
+    try {
+      await resumeQueueItem(id);
+      fetchQueue();
+    } catch (err) {
+      console.error('Failed to resume', err);
+    }
+  };
+
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'completed': return <CheckCircle size={20} color="#10b981" />;
       case 'failed': return <XCircle size={20} color="#ef4444" />;
       case 'downloading': return <Loader2 size={20} color="#3b82f6" className="spin" />;
+      case 'paused': return <Pause size={20} color="#f59e0b" />;
       case 'queued': return <Clock size={20} color="#f59e0b" />;
       default: return <Clock size={20} color="var(--text-secondary)" />;
     }
@@ -67,7 +96,7 @@ export const Downloads: React.FC = () => {
     return <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}>Loading downloads...</div>;
   }
 
-  const activeDownloads = queue.filter(q => q.status === 'downloading' || q.status === 'queued');
+  const activeDownloads = queue.filter(q => q.status === 'downloading' || q.status === 'queued' || q.status === 'paused');
   const pastDownloads = queue.filter(q => q.status === 'completed' || q.status === 'failed');
 
   return (
@@ -113,6 +142,7 @@ export const Downloads: React.FC = () => {
           color: var(--text-secondary);
           display: flex;
           gap: 1rem;
+          flex-wrap: wrap;
         }
         .progress-bar-bg {
           height: 6px;
@@ -132,6 +162,24 @@ export const Downloads: React.FC = () => {
         }
         .spin {
           animation: spin 2s linear infinite;
+        }
+        .queue-actions {
+          display: flex;
+          align-items: center;
+          gap: 0.25rem;
+        }
+        .queue-actions button {
+          background: transparent;
+          border: none;
+          padding: 0.5rem;
+          cursor: pointer;
+          color: var(--text-secondary);
+          border-radius: var(--radius-sm);
+          transition: color 0.2s, background 0.2s;
+        }
+        .queue-actions button:hover {
+          color: var(--text-primary);
+          background: var(--bg-secondary);
         }
       `}} />
 
@@ -154,8 +202,16 @@ export const Downloads: React.FC = () => {
                   <div className="queue-info">
                     <div className="queue-title" title={item.filename}>{item.filename}</div>
                     <div className="queue-meta">
-                      <span>Status: {item.status.charAt(0).toUpperCase() + item.status.slice(1)}</span>
-                      <span>Target: {item.location}</span>
+                      <span>
+                        {item.status === 'paused' ? 'Paused' : item.status.charAt(0).toUpperCase() + item.status.slice(1)}
+                      </span>
+                      {item.status === 'downloading' && item.downloadedBytes != null && (
+                        <span>
+                          {formatBytes(item.downloadedBytes)}
+                          {item.totalBytes ? ` / ${formatBytes(item.totalBytes)}` : ''}
+                        </span>
+                      )}
+                      <span style={{ opacity: 0.7 }}>Target: {item.location}</span>
                     </div>
                     {item.status === 'downloading' && (
                       <div className="progress-bar-bg">
@@ -163,17 +219,24 @@ export const Downloads: React.FC = () => {
                       </div>
                     )}
                   </div>
-                  <div style={{ minWidth: '40px', textAlign: 'right', fontWeight: 'bold', color: 'var(--primary)' }}>
+                  <div style={{ minWidth: '50px', textAlign: 'right', fontWeight: 'bold', color: 'var(--primary)', fontSize: '0.9rem' }}>
                     {item.status === 'downloading' ? `${item.progress}%` : ''}
                   </div>
-                  <button 
-                    className="btn" 
-                    style={{ background: 'transparent', padding: '0.5rem', color: 'var(--text-secondary)' }}
-                    onClick={() => handleRemove(item.id)}
-                    title="Cancel Download"
-                  >
-                    <XCircle size={20} />
-                  </button>
+                  <div className="queue-actions">
+                    {(item.status === 'downloading' || item.status === 'queued') && (
+                      <button onClick={() => handlePause(item.id)} title="Pause Download">
+                        <Pause size={18} />
+                      </button>
+                    )}
+                    {item.status === 'paused' && (
+                      <button onClick={() => handleResume(item.id)} title="Resume Download" style={{ color: '#10b981' }}>
+                        <Play size={18} />
+                      </button>
+                    )}
+                    <button onClick={() => handleRemove(item.id)} title="Cancel Download">
+                      <XCircle size={18} />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -193,17 +256,17 @@ export const Downloads: React.FC = () => {
                     </div>
                     <div className="queue-meta">
                       <span>Target: {item.location}</span>
+                      {item.totalBytes && item.totalBytes > 0 && (
+                        <span>{formatBytes(item.totalBytes)}</span>
+                      )}
                       {item.error && <span style={{ color: '#ef4444' }}>Error: {item.error}</span>}
                     </div>
                   </div>
-                  <button 
-                    className="btn" 
-                    style={{ background: 'transparent', padding: '0.5rem', color: 'var(--text-secondary)' }}
-                    onClick={() => handleRemove(item.id)}
-                    title="Remove from history"
-                  >
-                    <XCircle size={20} />
-                  </button>
+                  <div className="queue-actions">
+                    <button onClick={() => handleRemove(item.id)} title="Remove from history">
+                      <XCircle size={18} />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
