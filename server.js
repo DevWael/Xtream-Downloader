@@ -280,13 +280,13 @@ const saveQueue = () => {
 
 // Download configuration
 const DOWNLOAD_CONFIG = {
-  connectTimeoutMs: 30_000,     // 30s to establish connection
-  socketTimeoutMs: 60_000,      // 60s idle before killing socket
-  stallTimeoutMs: 120_000,      // 2min no progress = stalled
-  maxRetries: 3,                // retry failed downloads up to 3 times
+  connectTimeoutMs: 60_000,     // 60s to establish connection (IPTV servers are slow)
+  socketTimeoutMs: 120_000,     // 2min idle before killing socket
+  stallTimeoutMs: 180_000,      // 3min no progress = stalled
+  maxRetries: 5,                // retry failed downloads up to 5 times
   retryDelayMs: 5_000,          // base delay between retries (exponential)
   maxHlsFailRate: 0.10,         // fail HLS if >10% segments fail
-  hlsSegmentTimeoutMs: 30_000,  // 30s timeout per HLS segment
+  hlsSegmentTimeoutMs: 60_000,  // 60s timeout per HLS segment
 };
 
 // Helper: make an HTTP GET with timeouts
