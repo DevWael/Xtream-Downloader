@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
-import { Tv, Film, MonitorPlay, LogOut, Settings } from 'lucide-react';
+import { Tv, Film, MonitorPlay, LogOut, Settings, DownloadCloud } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { LoginModal } from './LoginModal';
 
@@ -46,6 +46,24 @@ export const Layout: React.FC = () => {
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <Tv size={18} />
                 Series
+              </div>
+            </NavLink>
+            <NavLink 
+              to="/downloads" 
+              className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <DownloadCloud size={18} />
+                Downloads
+              </div>
+            </NavLink>
+            <NavLink 
+              to="/settings" 
+              className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Settings size={18} />
+                Settings
               </div>
             </NavLink>
           </div>

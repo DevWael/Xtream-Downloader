@@ -65,10 +65,24 @@ export interface SeriesInfo {
   episodes: Record<string, SeriesEpisode[]>;
 }
 
+interface CacheEntry {
+  data: any;
+  timestamp: number;
+}
+
+const apiCache = new Map<string, CacheEntry>();
+const CACHE_TTL = 2 * 60 * 60 * 1000; // 2 hours
+
 export const fetchFromApi = async (action: string, extraParams: Record<string, string> = {}) => {
   const config = getStoredAuthConfig();
   if (!config) {
     throw new Error('Not authenticated');
+  }
+
+  const cacheKey = `${action}_${JSON.stringify(extraParams)}`;
+  const cached = apiCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.data;
   }
 
   // Ensure host doesn't end with a slash
@@ -88,7 +102,10 @@ export const fetchFromApi = async (action: string, extraParams: Record<string, s
   if (!response.ok) {
     throw new Error(`API error: ${response.statusText}`);
   }
-  return response.json();
+  
+  const data = await response.json();
+  apiCache.set(cacheKey, { data, timestamp: Date.now() });
+  return data;
 };
 
 export const getVodCategories = async (): Promise<Category[]> => {
@@ -134,4 +151,74 @@ export const getSeriesDownloadUrl = (streamId: string, extension: string, title?
   if (!originalUrl) return '';
   const filename = title ? `${title}.${extension}` : `episode_${streamId}.${extension}`;
   return `/api/download?url=${encodeURIComponent(originalUrl)}&filename=${encodeURIComponent(filename)}`;
+};
+
+export const downloadMedia = async (streamId: number | string, extension: string, title: string, type: 'movie' | 'series', location?: string, subfolder?: string) => {
+  const originalUrl = getStreamUrl(streamId, extension, type);
+  if (!originalUrl) return;
+  const filename = title ? `${title}.${extension}` : `${type}_${streamId}.${extension}`;
+  
+  // Append subfolder to location for organized directory structure
+  const finalLocation = location && subfolder ? `${location.replace(/\/$/, '')}/${subfolder}` : location;
+  
+  if (finalLocation) {
+    try {
+      const res = await fetch('/api/queue', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: originalUrl, filename, location: finalLocation })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      console.log('Server download queued:', data.id);
+      return true;
+    } catch (err) {
+      console.error('Failed to queue server download:', err);
+      alert('Failed to add to download queue');
+    }
+  } else {
+    const url = `/api/download?url=${encodeURIComponent(originalUrl)}&filename=${encodeURIComponent(filename)}`;
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+};
+
+// Queue & Settings APIs
+export const getSettings = async () => {
+  const res = await fetch('/api/settings');
+  if (!res.ok) throw new Error('Failed to fetch settings');
+  return res.json();
+};
+
+export const saveSettings = async (settings: any) => {
+  const res = await fetch('/api/settings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(settings)
+  });
+  if (!res.ok) throw new Error('Failed to save settings');
+  return res.json();
+};
+
+export const getQueue = async () => {
+  const res = await fetch('/api/queue');
+  if (!res.ok) throw new Error('Failed to fetch queue');
+  return res.json();
+};
+
+export const removeQueueItem = async (id: string) => {
+  const res = await fetch(`/api/queue/${id}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('Failed to remove queue item');
+  return res.json();
+};
+
+export const clearCompletedQueue = async () => {
+  const res = await fetch(`/api/queue`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('Failed to clear queue');
+  return res.json();
 };

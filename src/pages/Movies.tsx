@@ -1,26 +1,47 @@
 import React, { useEffect, useState } from 'react';
 import { Download, CheckSquare } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import type { Category, Stream } from '../services/api';
-import { getVodCategories, getVodStreams, getMovieDownloadUrl, getStreamUrl } from '../services/api';
+import { getVodCategories, getVodStreams, getStreamUrl, downloadMedia } from '../services/api';
 import { Loader } from '../components/Loader';
 import { MediaCard } from '../components/MediaCard';
 import { useDownloaded } from '../hooks/useDownloaded';
 import { VideoPlayerModal } from '../components/VideoPlayerModal';
+import { DownloadLocationModal } from '../components/DownloadLocationModal';
+import { useAuth } from '../hooks/useAuth';
+import { showToast } from '../utils/toast';
 
 export const Movies: React.FC = () => {
   const [categories, setCategories] = useState<Category[]>([]);
-  const [activeCategory, setActiveCategory] = useState<string>('');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeCategory = searchParams.get('category') || '';
+  
+  const setActiveCategory = (cat: string) => {
+    setSearchParams(prev => {
+      prev.set('category', cat);
+      return prev;
+    });
+  };
   const [allStreams, setAllStreams] = useState<Stream[]>([]);
   const [categoryCounts, setCategoryCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [loadingStreams, setLoadingStreams] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { authConfig } = useAuth();
 
-  // New states for bulk download
+  // New states for bulk download & selection
   const { isDownloaded, toggleDownloaded } = useDownloaded();
   const [previewStream, setPreviewStream] = useState<{url: string, title: string} | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set());
+  
+  // States for download location modal
+  const [downloadPrompt, setDownloadPrompt] = useState<{
+    streamId?: number,
+    extension?: string,
+    title?: string,
+    isBulk?: boolean
+  } | null>(null);
 
   // Derived state for currently visible streams
   const streams = allStreams.filter(s => s.category_id === activeCategory);
@@ -32,8 +53,11 @@ export const Movies: React.FC = () => {
         // Fetch categories first to populate the sidebar quickly
         const cats = await getVodCategories();
         setCategories(cats);
-        if (cats.length > 0) {
-          setActiveCategory(cats[0].category_id);
+        if (cats.length > 0 && !searchParams.get('category')) {
+          setSearchParams(prev => {
+            prev.set('category', cats[0].category_id);
+            return prev;
+          }, { replace: true });
         }
         setLoading(false);
 
@@ -78,38 +102,38 @@ export const Movies: React.FC = () => {
     });
   };
 
+  const handleDownloadConfirm = async (locationPath?: string) => {
+    if (!downloadPrompt) return;
+
+    if (downloadPrompt.isBulk) {
+      const selectedStreams = streams.filter(s => selectedItems.has(s.stream_id));
+      let count = 0;
+      for (let i = 0; i < selectedStreams.length; i++) {
+        const stream = selectedStreams[i];
+        const success = await downloadMedia(stream.stream_id, stream.container_extension, stream.name, 'movie', locationPath, stream.name);
+        if (success) count++;
+        if (!isDownloaded(stream.stream_id)) toggleDownloaded(stream.stream_id);
+      }
+      setSelectionMode(false);
+      setSelectedItems(new Set());
+      if (count > 0) showToast(`Added ${count} movies to download queue!`);
+    } else if (downloadPrompt.streamId && downloadPrompt.extension && downloadPrompt.title) {
+      const success = await downloadMedia(downloadPrompt.streamId, downloadPrompt.extension, downloadPrompt.title, 'movie', locationPath, downloadPrompt.title);
+      if (!isDownloaded(downloadPrompt.streamId)) toggleDownloaded(downloadPrompt.streamId);
+      if (success) showToast('Added to download queue!');
+    }
+    
+    setDownloadPrompt(null);
+  };
+
   const handleBulkDownload = async () => {
     if (selectedItems.size === 0) return;
 
-    const selectedStreams = streams.filter(s => selectedItems.has(s.stream_id));
-    
-    // Process downloads with a slight delay to prevent browser blocking
-    for (let i = 0; i < selectedStreams.length; i++) {
-      const stream = selectedStreams[i];
-      const url = getMovieDownloadUrl(stream.stream_id, stream.container_extension, stream.name);
-      
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = stream.name;
-      link.style.display = 'none';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-      // Mark as downloaded automatically
-      if (!isDownloaded(stream.stream_id)) {
-        toggleDownloaded(stream.stream_id);
-      }
-
-      // Delay between downloads (500ms)
-      if (i < selectedStreams.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 500));
-      }
+    if (authConfig?.hasServerDownload) {
+      setDownloadPrompt({ isBulk: true });
+    } else {
+      await handleDownloadConfirm();
     }
-    
-    // Exit selection mode after initiating downloads
-    setSelectionMode(false);
-    setSelectedItems(new Set());
   };
 
   if (loading) return <Loader />;
@@ -188,7 +212,18 @@ export const Movies: React.FC = () => {
               <MediaCard 
                 key={stream.stream_id} 
                 item={stream} 
-                downloadUrl={getMovieDownloadUrl(stream.stream_id, stream.container_extension, stream.name)}
+                onDownload={() => {
+                  if (authConfig?.hasServerDownload) {
+                    setDownloadPrompt({
+                      streamId: stream.stream_id,
+                      extension: stream.container_extension,
+                      title: stream.name
+                    });
+                  } else {
+                    downloadMedia(stream.stream_id, stream.container_extension, stream.name, 'movie');
+                    if (!isDownloaded(stream.stream_id)) toggleDownloaded(stream.stream_id);
+                  }
+                }}
                 isDownloaded={isDownloaded(stream.stream_id)}
                 onToggleDownloaded={() => toggleDownloaded(stream.stream_id)}
                 selectable={selectionMode}
@@ -212,6 +247,15 @@ export const Movies: React.FC = () => {
           streamUrl={previewStream.url}
           title={previewStream.title}
           onClose={() => setPreviewStream(null)}
+        />
+      )}
+
+      {downloadPrompt && (
+        <DownloadLocationModal
+          filename={downloadPrompt.title}
+          bulkCount={downloadPrompt.isBulk ? selectedItems.size : undefined}
+          onClose={() => setDownloadPrompt(null)}
+          onConfirm={handleDownloadConfirm}
         />
       )}
     </div>

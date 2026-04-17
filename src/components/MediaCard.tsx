@@ -3,7 +3,7 @@ import type { Stream, Series } from '../services/api';
 
 interface MediaCardProps {
   item: Stream | Series;
-  downloadUrl?: string;
+  onDownload?: () => void;
   onClick?: () => void;
   
   // New features props
@@ -18,7 +18,7 @@ interface MediaCardProps {
 
 export const MediaCard: React.FC<MediaCardProps> = ({ 
   item, 
-  downloadUrl, 
+  onDownload, 
   onClick,
   isDownloaded,
   onToggleDownloaded,
@@ -110,14 +110,13 @@ export const MediaCard: React.FC<MediaCardProps> = ({
           {meta && <span>{new Date(isMovie ? parseInt(meta as string) * 1000 : meta as string).getFullYear() || ''}</span>}
         </div>
         
-        {downloadUrl && !selectable && (
-          <a 
-            href={downloadUrl} 
+        {onDownload && !selectable && (
+          <button 
             className="btn btn-primary btn-block" 
             style={{ marginTop: 'auto' }}
-            download
             onClick={(e) => {
               e.stopPropagation();
+              onDownload();
               if (onToggleDownloaded && !isDownloaded) {
                 onToggleDownloaded();
               }
@@ -126,7 +125,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({
           >
             <Download size={18} />
             Download
-          </a>
+          </button>
         )}
       </div>
     </div>

@@ -1,22 +1,54 @@
 import React, { useEffect, useState } from 'react';
 import { Download, ChevronLeft, Check, Play } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import type { Category, Series as SeriesModel, SeriesInfo } from '../services/api';
-import { getSeriesCategories, getSeries, getSeriesInfo, getSeriesDownloadUrl, getStreamUrl } from '../services/api';
+import { getSeriesCategories, getSeries, getSeriesInfo, getStreamUrl } from '../services/api';
 import { Loader } from '../components/Loader';
 import { MediaCard } from '../components/MediaCard';
 import { useDownloaded } from '../hooks/useDownloaded';
 import { VideoPlayerModal } from '../components/VideoPlayerModal';
+import { DownloadLocationModal } from '../components/DownloadLocationModal';
+import { useAuth } from '../hooks/useAuth';
+import { downloadMedia } from '../services/api';
+import { showToast } from '../utils/toast';
 
 export const Series: React.FC = () => {
   const [categories, setCategories] = useState<Category[]>([]);
-  const [activeCategory, setActiveCategory] = useState<string>('');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeCategory = searchParams.get('category') || '';
+  const setActiveCategory = (cat: string) => {
+    setSearchParams(prev => { 
+      prev.set('category', cat); 
+      prev.delete('series');
+      prev.delete('season');
+      return prev; 
+    });
+  };
   
   const [allSeries, setAllSeries] = useState<SeriesModel[]>([]);
   const [categoryCounts, setCategoryCounts] = useState<Record<string, number>>({});
-  const [selectedSeries, setSelectedSeries] = useState<SeriesModel | null>(null);
+  
+  const selectedSeriesId = searchParams.get('series');
+  const selectedSeries = allSeries.find(s => s.series_id.toString() === selectedSeriesId) || null;
+  const setSelectedSeries = (s: SeriesModel | null) => {
+    setSearchParams(prev => {
+      if (s) prev.set('series', s.series_id.toString());
+      else { prev.delete('series'); prev.delete('season'); }
+      return prev;
+    });
+  };
   
   const [seriesInfo, setSeriesInfo] = useState<SeriesInfo | null>(null);
-  const [activeSeason, setActiveSeason] = useState<number | null>(null);
+  
+  const activeSeasonParam = searchParams.get('season');
+  const activeSeason = activeSeasonParam ? Number(activeSeasonParam) : null;
+  const setActiveSeason = (season: number | null) => {
+    setSearchParams(prev => {
+      if (season !== null) prev.set('season', season.toString());
+      else prev.delete('season');
+      return prev;
+    });
+  };
   
   const [loading, setLoading] = useState(true);
   const [loadingContent, setLoadingContent] = useState(true);
@@ -27,6 +59,15 @@ export const Series: React.FC = () => {
   // New states for downloaded and bulk selection
   const { isDownloaded, toggleDownloaded } = useDownloaded();
   const [selectedEpisodes, setSelectedEpisodes] = useState<Set<string>>(new Set());
+  const { authConfig } = useAuth();
+  
+  // Download prompt state
+  const [downloadPrompt, setDownloadPrompt] = useState<{
+    streamId?: string,
+    extension?: string,
+    title?: string,
+    isBulk?: boolean
+  } | null>(null);
 
   // Derived state for currently visible series
   const seriesList = allSeries.filter(s => s.category_id === activeCategory);
@@ -38,8 +79,8 @@ export const Series: React.FC = () => {
         // Fetch categories first
         const cats = await getSeriesCategories();
         setCategories(cats);
-        if (cats.length > 0) {
-          setActiveCategory(cats[0].category_id);
+        if (cats.length > 0 && !searchParams.get('category')) {
+          setSearchParams(prev => { prev.set('category', cats[0].category_id); return prev; }, { replace: true });
         }
         setLoading(false);
 
@@ -76,13 +117,15 @@ export const Series: React.FC = () => {
         const data = await getSeriesInfo(selectedSeries.series_id.toString());
         setSeriesInfo(data);
         
-        // Find first season that has episodes
+        // Find first season that has episodes if none is selected
         let firstAvailableSeason = null;
         if (data.episodes) {
            const seasons = Object.keys(data.episodes).map(Number).sort((a,b) => a-b);
            if(seasons.length > 0) firstAvailableSeason = seasons[0];
         }
-        setActiveSeason(firstAvailableSeason);
+        if (!activeSeasonParam) {
+          setActiveSeason(firstAvailableSeason);
+        }
       } catch (err) {
         setError('Failed to load series details');
       } finally {
@@ -128,37 +171,41 @@ export const Series: React.FC = () => {
     }
   };
 
+  const handleDownloadConfirm = async (locationPath?: string) => {
+    if (!downloadPrompt || !selectedSeries || activeSeason === null || !seriesInfo) return;
+
+    if (downloadPrompt.isBulk) {
+      const episodes = seriesInfo.episodes[activeSeason] || [];
+      const selectedList = episodes.filter(ep => selectedEpisodes.has(ep.id));
+      let count = 0;
+      
+      for (let i = 0; i < selectedList.length; i++) {
+        const episode = selectedList[i];
+        const title = `${selectedSeries.name} - S${activeSeason}E${episode.episode_num} - ${episode.title}`;
+        const success = await downloadMedia(episode.id, episode.container_extension, title, 'series', locationPath, selectedSeries.name);
+        if (success) count++;
+        
+        if (!isDownloaded(episode.id)) toggleDownloaded(episode.id);
+      }
+      setSelectedEpisodes(new Set());
+      if (count > 0) showToast(`Added ${count} episodes to download queue!`);
+    } else if (downloadPrompt.streamId && downloadPrompt.extension && downloadPrompt.title) {
+      const success = await downloadMedia(downloadPrompt.streamId, downloadPrompt.extension, downloadPrompt.title, 'series', locationPath, selectedSeries.name);
+      if (!isDownloaded(downloadPrompt.streamId)) toggleDownloaded(downloadPrompt.streamId);
+      if (success) showToast('Added to download queue!');
+    }
+    
+    setDownloadPrompt(null);
+  };
+
   const handleBulkDownload = async () => {
     if (selectedEpisodes.size === 0 || !seriesInfo || activeSeason === null || !selectedSeries) return;
 
-    const episodes = seriesInfo.episodes[activeSeason] || [];
-    const selectedList = episodes.filter(ep => selectedEpisodes.has(ep.id));
-    
-    for (let i = 0; i < selectedList.length; i++) {
-      const episode = selectedList[i];
-      const title = `${selectedSeries.name} - S${activeSeason}E${episode.episode_num} - ${episode.title}`;
-      const url = getSeriesDownloadUrl(episode.id, episode.container_extension, title);
-      
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = title;
-      link.style.display = 'none';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-      // Mark as downloaded automatically
-      if (!isDownloaded(episode.id)) {
-        toggleDownloaded(episode.id);
-      }
-
-      // Delay between downloads (500ms)
-      if (i < selectedList.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 500));
-      }
+    if (authConfig?.hasServerDownload) {
+      setDownloadPrompt({ isBulk: true });
+    } else {
+      await handleDownloadConfirm();
     }
-    
-    setSelectedEpisodes(new Set());
   };
 
   if (loading) return <Loader />;
@@ -172,10 +219,7 @@ export const Series: React.FC = () => {
             <div
               key={cat.category_id}
               className={`category-item ${activeCategory === cat.category_id ? 'active' : ''}`}
-              onClick={() => {
-                setActiveCategory(cat.category_id);
-                handleBack();
-              }}
+              onClick={() => setActiveCategory(cat.category_id)}
             >
               <span>{cat.category_name}</span>
               {categoryCounts[cat.category_id] !== undefined && (
@@ -341,18 +385,26 @@ export const Series: React.FC = () => {
                         {episode.info?.plot && <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{episode.info.plot}</p>}
                       </div>
                       <div className="episode-actions" onClick={(e) => e.stopPropagation()}>
-                        <a 
-                          href={getSeriesDownloadUrl(episode.id, episode.container_extension, `${selectedSeries.name} - S${activeSeason}E${episode.episode_num} - ${episode.title}`)} 
+                        <button 
                           className="btn btn-primary"
-                          download
                           title="Download Episode"
                           onClick={() => {
-                            if (!isDownloaded(episode.id)) toggleDownloaded(episode.id);
+                            const title = `${selectedSeries.name} - S${activeSeason}E${episode.episode_num} - ${episode.title}`;
+                            if (authConfig?.hasServerDownload) {
+                              setDownloadPrompt({
+                                streamId: episode.id,
+                                extension: episode.container_extension,
+                                title: title
+                              });
+                            } else {
+                              downloadMedia(episode.id, episode.container_extension, title, 'series');
+                              if (!isDownloaded(episode.id)) toggleDownloaded(episode.id);
+                            }
                           }}
                           style={{ padding: '0.5rem' }}
                         >
                           <Download size={18} />
-                        </a>
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -394,6 +446,15 @@ export const Series: React.FC = () => {
           streamUrl={previewStream.url}
           title={previewStream.title}
           onClose={() => setPreviewStream(null)}
+        />
+      )}
+
+      {downloadPrompt && (
+        <DownloadLocationModal
+          filename={downloadPrompt.title}
+          bulkCount={downloadPrompt.isBulk ? selectedEpisodes.size : undefined}
+          onClose={() => setDownloadPrompt(null)}
+          onConfirm={handleDownloadConfirm}
         />
       )}
     </div>

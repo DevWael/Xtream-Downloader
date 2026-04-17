@@ -4,24 +4,69 @@ export interface AuthConfig {
   host: string;
   username: string;
   password: string;
+  hasServerDownload?: boolean;
 }
 
 const AUTH_KEY = 'xtream_auth_config';
+
+export const getStoredAuthConfig = (): AuthConfig | null => {
+  const stored = localStorage.getItem(AUTH_KEY);
+  if (!stored) return null;
+  try {
+    return JSON.parse(stored);
+  } catch {
+    return null;
+  }
+};
 
 export const useAuth = () => {
   const [authConfig, setAuthConfigState] = useState<AuthConfig | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
 
-  useEffect(() => {
+  const fetchEnvConfig = async () => {
+    let serverHasDownload = false;
+    try {
+      const response = await fetch('/api/config');
+      if (response.ok) {
+        const config = await response.json();
+        serverHasDownload = !!config.hasServerDownload;
+        if (config.url && config.username && config.password) {
+          const envConfig = { 
+            host: config.url, 
+            username: config.username, 
+            password: config.password,
+            hasServerDownload: serverHasDownload
+          };
+          setAuthConfigState(envConfig);
+          localStorage.setItem(AUTH_KEY, JSON.stringify(envConfig));
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to fetch env config, falling back to local storage');
+    }
+
+    // Fallback to local storage
     const stored = localStorage.getItem(AUTH_KEY);
     if (stored) {
       try {
-        setAuthConfigState(JSON.parse(stored));
+        const parsed = JSON.parse(stored);
+        parsed.hasServerDownload = serverHasDownload; // Always use latest server setting
+        setAuthConfigState(parsed);
       } catch (e) {
         console.error('Failed to parse auth config');
       }
     }
-    setIsLoaded(true);
+  };
+
+  useEffect(() => {
+    fetchEnvConfig().then(() => setIsLoaded(true));
+    
+    const handleConfigUpdate = () => {
+      fetchEnvConfig();
+    };
+    window.addEventListener('auth_config_updated', handleConfigUpdate);
+    return () => window.removeEventListener('auth_config_updated', handleConfigUpdate);
   }, []);
 
   const setAuthConfig = (config: AuthConfig | null) => {
@@ -40,19 +85,7 @@ export const useAuth = () => {
     isAuthenticated: authConfig !== null,
     isLoaded,
     setAuthConfig,
-    logout
+    logout,
+    refreshConfig: fetchEnvConfig
   };
-};
-
-// Expose a synchronous getter for the API service to use without React hooks
-export const getStoredAuthConfig = (): AuthConfig | null => {
-  const stored = localStorage.getItem(AUTH_KEY);
-  if (stored) {
-    try {
-      return JSON.parse(stored);
-    } catch (e) {
-      return null;
-    }
-  }
-  return null;
 };

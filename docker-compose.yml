@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  xtream-downloader:
+    build: .
+    container_name: xtream-downloader
+    restart: unless-stopped
+    ports:
+      - "8945:8080"
+    environment:
+      - XTREAM_URL=http://your-iptv-provider.com:port
+      - XTREAM_USERNAME=your_username
+      - XTREAM_PASSWORD=your_password
+      - CONFIG_DIR=/config
+      - NODE_ENV=production
+    volumes:
+      # Persistent configuration and download queue state
+      - ./config:/config
+      
+      # Example media volumes (Add these paths in the App Settings UI)
+      - /mnt/Storage/media/movies:/movies
+      - /mnt/Storage/media/series:/series
+      
+    labels:
+      org.truenas.webui.port: "8945"
+
+x-portals:
+  webui:
+    host: 0.0.0.0
+    name: Web UI
+    path: /
+    port: 8945
+    scheme: http
