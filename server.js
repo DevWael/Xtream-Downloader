@@ -278,11 +278,53 @@ const saveQueue = () => {
   }
 };
 
+// Download configuration
+const DOWNLOAD_CONFIG = {
+  connectTimeoutMs: 30_000,     // 30s to establish connection
+  socketTimeoutMs: 60_000,      // 60s idle before killing socket
+  stallTimeoutMs: 120_000,      // 2min no progress = stalled
+  maxRetries: 3,                // retry failed downloads up to 3 times
+  retryDelayMs: 5_000,          // base delay between retries (exponential)
+  maxHlsFailRate: 0.10,         // fail HLS if >10% segments fail
+  hlsSegmentTimeoutMs: 30_000,  // 30s timeout per HLS segment
+};
+
+// Helper: make an HTTP GET with timeouts
+const httpGetWithTimeout = (url, onResponse, onError) => {
+  const targetUrl = new URL(url);
+  const client = targetUrl.protocol === 'https:' ? https : http;
+
+  const req = client.get(targetUrl, (res) => {
+    res.setTimeout(DOWNLOAD_CONFIG.socketTimeoutMs, () => {
+      console.error(`[Download] Socket idle timeout for ${url.substring(0, 80)}`);
+      req.destroy(new Error('Socket idle timeout'));
+    });
+    onResponse(res);
+  });
+
+  req.setTimeout(DOWNLOAD_CONFIG.connectTimeoutMs, () => {
+    console.error(`[Download] Connection timeout for ${url.substring(0, 80)}`);
+    req.destroy(new Error('Connection timeout'));
+  });
+
+  req.on('error', onError);
+  return req;
+};
+
+// Helper: cleanup after download attempt
+const resetDownloadState = () => {
+  currentDownloadReq = null;
+  currentDownloadingId = null;
+};
+
 // Background Queue Processor
 const processQueue = () => {
   if (currentDownloadReq !== null) return; // Already downloading
   const nextItem = downloadQueue.find(item => item.status === 'queued');
   if (!nextItem) return;
+
+  // Initialize retry counter
+  if (nextItem.retryCount === undefined) nextItem.retryCount = 0;
 
   // Track current downloading item ID for pause support
   currentDownloadingId = nextItem.id;
@@ -299,7 +341,7 @@ const processQueue = () => {
       console.error(`Failed to create dir ${nextItem.location}:`, e);
       nextItem.status = 'failed';
       nextItem.error = 'Failed to create directory';
-      currentDownloadReq = null;
+      resetDownloadState();
       saveQueue();
       processQueue();
       return;
@@ -308,179 +350,253 @@ const processQueue = () => {
 
   const filePath = path.join(nextItem.location, nextItem.filename);
   
+  // Retry handler — retries with exponential backoff
+  const handleFailure = (error) => {
+    const errorMsg = typeof error === 'string' ? error : (error?.message || 'Unknown error');
+    console.error(`[Download] Failed "${nextItem.filename}": ${errorMsg} (attempt ${nextItem.retryCount + 1}/${DOWNLOAD_CONFIG.maxRetries})`);
+
+    // Clean up partial file
+    try { if (fs.existsSync(filePath)) fs.unlinkSync(filePath); } catch {}
+
+    if (nextItem.retryCount < DOWNLOAD_CONFIG.maxRetries - 1) {
+      nextItem.retryCount++;
+      nextItem.status = 'queued';
+      nextItem.progress = 0;
+      nextItem.downloadedBytes = 0;
+      nextItem.error = `Retry ${nextItem.retryCount}/${DOWNLOAD_CONFIG.maxRetries - 1}: ${errorMsg}`;
+      resetDownloadState();
+      saveQueue();
+      const delay = DOWNLOAD_CONFIG.retryDelayMs * Math.pow(2, nextItem.retryCount - 1);
+      console.log(`[Download] Retrying "${nextItem.filename}" in ${delay / 1000}s...`);
+      setTimeout(processQueue, delay);
+    } else {
+      nextItem.status = 'failed';
+      nextItem.error = errorMsg;
+      resetDownloadState();
+      saveQueue();
+      processQueue();
+    }
+  };
+
   let redirectCount = 0;
 
   const startDownload = (urlToFetch) => {
     if (redirectCount > 5) {
-      nextItem.status = 'failed';
-      nextItem.error = 'Too many redirects';
-      currentDownloadReq = null;
-      saveQueue();
-      processQueue();
-      return;
+      return handleFailure('Too many redirects');
     }
 
-    const targetUrl = new URL(urlToFetch);
-    const client = targetUrl.protocol === 'https:' ? https : http;
-
-    currentDownloadReq = client.get(targetUrl, (res) => {
+    currentDownloadReq = httpGetWithTimeout(urlToFetch, (res) => {
       // Handle redirects
       if ([301, 302, 303, 307, 308].includes(res.statusCode || 0) && res.headers.location) {
-          redirectCount++;
-          const redirectUrl = new URL(res.headers.location, targetUrl).toString();
-          startDownload(redirectUrl);
-          return;
+        redirectCount++;
+        const redirectUrl = new URL(res.headers.location, urlToFetch).toString();
+        startDownload(redirectUrl);
+        return;
       }
 
       if (res.statusCode !== 200) {
-        nextItem.status = 'failed';
-        nextItem.error = `HTTP ${res.statusCode}`;
-        currentDownloadReq = null;
-        saveQueue();
-        processQueue();
-        return;
+        return handleFailure(`HTTP ${res.statusCode}`);
       }
 
       const contentType = res.headers['content-type'] || '';
       const isHLS = contentType.includes('mpegurl') || contentType.includes('m3u') || urlToFetch.includes('.m3u8');
 
       if (isHLS) {
-        // HLS stream — read playlist, then download segments
-        console.log(`[Queue] HLS playlist detected for "${nextItem.filename}"`);
-        let data = '';
-        res.on('data', chunk => data += chunk);
-        res.on('end', async () => {
-          const lines = data.split('\n');
-          const segments = lines.filter(l => l.trim() && !l.startsWith('#')).map(l => new URL(l.trim(), urlToFetch).toString());
-
-          if (segments.length === 0) {
-            nextItem.status = 'failed';
-            nextItem.error = 'HLS playlist is empty';
-            currentDownloadReq = null;
-            saveQueue();
-            processQueue();
-            return;
-          }
-
-          console.log(`[Queue] Downloading ${segments.length} HLS segments for "${nextItem.filename}"`);
-          
-          // Fix extension to .mp4 for HLS streams
-          const hlsFilePath = filePath.replace(/\.[^/.]+$/, '') + '.mp4';
-          if (nextItem.filename.match(/\.[^/.]+$/)) {
-            nextItem.filename = nextItem.filename.replace(/\.[^/.]+$/, '.mp4');
-          }
-
-          const fileStream = fs.createWriteStream(hlsFilePath);
-          let completedSegments = 0;
-
-          const downloadHLSSegment = (segUrl) => {
-            return new Promise((resolve) => {
-              const segTarget = new URL(segUrl);
-              const segClient = segTarget.protocol === 'https:' ? https : http;
-
-              const fetchSeg = (urlObj, retries = 3) => {
-                segClient.get(urlObj, (segRes) => {
-                  if ([301, 302, 303, 307, 308].includes(segRes.statusCode || 0) && segRes.headers.location) {
-                    return fetchSeg(new URL(segRes.headers.location, urlObj.toString()), retries);
-                  }
-                  if (segRes.statusCode !== 200) {
-                    if (retries > 0) return fetchSeg(urlObj, retries - 1);
-                    return resolve();
-                  }
-                  segRes.pipe(fileStream, { end: false });
-                  segRes.on('end', () => {
-                    completedSegments++;
-                    nextItem.progress = Math.round((completedSegments / segments.length) * 100);
-                    if (completedSegments % 5 === 0) saveQueue();
-                    resolve();
-                  });
-                  segRes.on('error', () => resolve());
-                }).on('error', () => {
-                  if (retries > 0) return fetchSeg(urlObj, retries - 1);
-                  resolve();
-                });
-              };
-              fetchSeg(segTarget);
-            });
-          };
-
-          try {
-            for (const segUrl of segments) {
-              await downloadHLSSegment(segUrl);
-            }
-            fileStream.end();
-            fileStream.on('finish', () => {
-              nextItem.status = 'completed';
-              nextItem.progress = 100;
-              currentDownloadReq = null;
-              saveQueue();
-              processQueue();
-            });
-          } catch (err) {
-            fs.unlink(hlsFilePath, () => {});
-            nextItem.status = 'failed';
-            nextItem.error = err.message || 'HLS download failed';
-            currentDownloadReq = null;
-            saveQueue();
-            processQueue();
-          }
-        });
+        downloadHLS(nextItem, urlToFetch, filePath, res, handleFailure);
         return;
       }
 
-      // Normal direct file download
-      const totalBytes = parseInt(res.headers['content-length'] || '0', 10);
-      let downloadedBytes = 0;
-      nextItem.totalBytes = totalBytes;
-      nextItem.downloadedBytes = 0;
-      
-      const fileStream = fs.createWriteStream(filePath);
-      res.pipe(fileStream);
+      downloadDirect(nextItem, filePath, res, handleFailure);
 
-      let lastSave = Date.now();
-      res.on('data', (chunk) => {
-        downloadedBytes += chunk.length;
-        nextItem.downloadedBytes = downloadedBytes;
-        if (totalBytes) {
-          nextItem.progress = Math.round((downloadedBytes / totalBytes) * 100);
-          // Throttle saveQueue to avoid disk thrashing
-          if (Date.now() - lastSave > 1000) {
-            saveQueue();
-            lastSave = Date.now();
-          }
-        }
-      });
-
-      fileStream.on('finish', () => {
-        fileStream.close();
-        nextItem.status = 'completed';
-        nextItem.progress = 100;
-        currentDownloadReq = null;
-        currentDownloadingId = null;
-        saveQueue();
-        processQueue();
-      });
-
-      fileStream.on('error', (err) => {
-        fs.unlink(filePath, () => {}); // Try to delete partial file
-        nextItem.status = 'failed';
-        nextItem.error = err.message;
-        currentDownloadReq = null;
-        currentDownloadingId = null;
-        saveQueue();
-        processQueue();
-      });
-    }).on('error', (err) => {
-      nextItem.status = 'failed';
-      nextItem.error = err.message;
-      currentDownloadReq = null;
-      currentDownloadingId = null;
-      saveQueue();
-      processQueue();
+    }, (err) => {
+      handleFailure(err);
     });
   };
 
   startDownload(nextItem.url);
+};
+
+// Direct file download with stall detection
+const downloadDirect = (item, filePath, res, onFailure) => {
+  const totalBytes = parseInt(res.headers['content-length'] || '0', 10);
+  let downloadedBytes = 0;
+  item.totalBytes = totalBytes;
+  item.downloadedBytes = 0;
+  
+  const fileStream = fs.createWriteStream(filePath);
+  res.pipe(fileStream);
+
+  // Stall watchdog — abort if no progress for 2 minutes
+  let lastProgressTime = Date.now();
+  let lastProgressBytes = 0;
+  const stallCheck = setInterval(() => {
+    if (downloadedBytes === lastProgressBytes) {
+      if (Date.now() - lastProgressTime > DOWNLOAD_CONFIG.stallTimeoutMs) {
+        clearInterval(stallCheck);
+        console.error(`[Download] Stall detected for "${item.filename}" at ${Math.round(downloadedBytes / 1024 / 1024)}MB — aborting`);
+        res.destroy();
+        fileStream.destroy();
+        onFailure('Download stalled (no progress for 2 minutes)');
+        return;
+      }
+    } else {
+      lastProgressTime = Date.now();
+      lastProgressBytes = downloadedBytes;
+    }
+  }, 10_000); // Check every 10 seconds
+
+  let lastSave = Date.now();
+  res.on('data', (chunk) => {
+    downloadedBytes += chunk.length;
+    item.downloadedBytes = downloadedBytes;
+    if (totalBytes) {
+      item.progress = Math.round((downloadedBytes / totalBytes) * 100);
+      if (Date.now() - lastSave > 1000) {
+        saveQueue();
+        lastSave = Date.now();
+      }
+    }
+  });
+
+  fileStream.on('finish', () => {
+    clearInterval(stallCheck);
+    fileStream.close();
+    item.status = 'completed';
+    item.progress = 100;
+    item.retryCount = 0;
+    resetDownloadState();
+    console.log(`[Download] ✅ Completed "${item.filename}" (${Math.round(downloadedBytes / 1024 / 1024)}MB)`);
+    saveQueue();
+    processQueue();
+  });
+
+  fileStream.on('error', (err) => {
+    clearInterval(stallCheck);
+    onFailure(err);
+  });
+
+  res.on('error', (err) => {
+    clearInterval(stallCheck);
+    fileStream.destroy();
+    onFailure(err);
+  });
+};
+
+// HLS download with segment failure tracking and timeouts
+const downloadHLS = (item, playlistUrl, filePath, res, onFailure) => {
+  console.log(`[Queue] HLS playlist detected for "${item.filename}"`);
+  let data = '';
+  res.on('data', chunk => data += chunk);
+  res.on('end', async () => {
+    const lines = data.split('\n');
+    const segments = lines.filter(l => l.trim() && !l.startsWith('#')).map(l => new URL(l.trim(), playlistUrl).toString());
+
+    if (segments.length === 0) {
+      return onFailure('HLS playlist is empty');
+    }
+
+    console.log(`[Queue] Downloading ${segments.length} HLS segments for "${item.filename}"`);
+    
+    // Fix extension to .mp4 for HLS streams
+    const hlsFilePath = filePath.replace(/\.[^/.]+$/, '') + '.mp4';
+    if (item.filename.match(/\.[^/.]+$/)) {
+      item.filename = item.filename.replace(/\.[^/.]+$/, '.mp4');
+    }
+
+    const fileStream = fs.createWriteStream(hlsFilePath);
+    let completedSegments = 0;
+    let failedSegments = 0;
+
+    const downloadHLSSegment = (segUrl, segIndex) => {
+      return new Promise((resolve) => {
+        const fetchSeg = (urlStr, retries = 3) => {
+          let segTimedOut = false;
+          
+          const segReq = httpGetWithTimeout(urlStr, (segRes) => {
+            if ([301, 302, 303, 307, 308].includes(segRes.statusCode || 0) && segRes.headers.location) {
+              return fetchSeg(new URL(segRes.headers.location, urlStr).toString(), retries);
+            }
+            if (segRes.statusCode !== 200) {
+              if (retries > 0) return fetchSeg(urlStr, retries - 1);
+              failedSegments++;
+              return resolve();
+            }
+
+            // Per-segment timeout
+            const segTimeout = setTimeout(() => {
+              segTimedOut = true;
+              segReq.destroy();
+              if (retries > 0) return fetchSeg(urlStr, retries - 1);
+              failedSegments++;
+              resolve();
+            }, DOWNLOAD_CONFIG.hlsSegmentTimeoutMs);
+
+            segRes.pipe(fileStream, { end: false });
+            segRes.on('end', () => {
+              if (segTimedOut) return;
+              clearTimeout(segTimeout);
+              completedSegments++;
+              item.progress = Math.round((completedSegments / segments.length) * 100);
+              if (completedSegments % 5 === 0) saveQueue();
+              resolve();
+            });
+            segRes.on('error', () => {
+              if (segTimedOut) return;
+              clearTimeout(segTimeout);
+              if (retries > 0) return fetchSeg(urlStr, retries - 1);
+              failedSegments++;
+              resolve();
+            });
+          }, (err) => {
+            if (segTimedOut) return;
+            if (retries > 0) return fetchSeg(urlStr, retries - 1);
+            failedSegments++;
+            resolve();
+          });
+        };
+        fetchSeg(segUrl);
+      });
+    };
+
+    try {
+      for (let i = 0; i < segments.length; i++) {
+        await downloadHLSSegment(segments[i], i);
+
+        // Check if too many segments have failed
+        const totalProcessed = completedSegments + failedSegments;
+        if (failedSegments > 0 && totalProcessed > 10) {
+          const failRate = failedSegments / totalProcessed;
+          if (failRate > DOWNLOAD_CONFIG.maxHlsFailRate) {
+            fileStream.destroy();
+            try { fs.unlinkSync(hlsFilePath); } catch {}
+            return onFailure(`Too many HLS segments failed (${failedSegments}/${totalProcessed}, ${Math.round(failRate * 100)}%)`);
+          }
+        }
+      }
+
+      fileStream.end();
+      fileStream.on('finish', () => {
+        if (failedSegments > 0) {
+          console.warn(`[Download] ⚠️ HLS completed with ${failedSegments}/${segments.length} failed segments`);
+        }
+        item.status = 'completed';
+        item.progress = 100;
+        item.retryCount = 0;
+        resetDownloadState();
+        console.log(`[Download] ✅ Completed HLS "${item.filename}" (${completedSegments}/${segments.length} segments)`);
+        saveQueue();
+        processQueue();
+      });
+    } catch (err) {
+      fileStream.destroy();
+      try { fs.unlinkSync(hlsFilePath); } catch {}
+      onFailure(err);
+    }
+  });
+
+  res.on('error', (err) => {
+    onFailure(err);
+  });
 };
 
 setInterval(processQueue, 3000);
