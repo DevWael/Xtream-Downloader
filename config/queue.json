@@ -1,53 +1,13 @@
 [
   {
-    "id": "1776462056414y9s2h",
-    "url": "http://mhiptv.info:2095/movie/01063604029/01100602403/275715.mkv",
-    "filename": "The Invisible Guest.mkv",
-    "location": "/Users/ahmadwael/Downloads/xtream/The Invisible Guest",
-    "status": "paused",
-    "progress": 0,
-    "addedAt": "2026-04-17T21:40:56.414Z",
-    "totalBytes": 1219679445,
-    "downloadedBytes": 0
-  },
-  {
-    "id": "1776462408598rvusik",
-    "url": "http://mhiptv.info:2095/series/01063604029/01100602403/270103.mkv",
-    "filename": "Phantom Lawyer - S1E1 - S01 E01.mp4",
-    "location": "/Users/ahmadwael/Downloads/xtream/Phantom Lawyer",
-    "status": "paused",
-    "progress": 97,
-    "addedAt": "2026-04-17T21:46:48.599Z",
-    "downloadedBytes": 0
-  },
-  {
-    "id": "1776462408610unhjsa",
-    "url": "http://mhiptv.info:2095/series/01063604029/01100602403/271048.mkv",
-    "filename": "Phantom Lawyer - S1E2 - S01 E02.mp4",
-    "location": "/Users/ahmadwael/Downloads/xtream/Phantom Lawyer",
-    "status": "completed",
-    "progress": 100,
-    "addedAt": "2026-04-17T21:46:48.610Z",
-    "downloadedBytes": 0
-  },
-  {
-    "id": "1776462408627p0h7ku",
-    "url": "http://mhiptv.info:2095/series/01063604029/01100602403/272069.mkv",
-    "filename": "Phantom Lawyer - S1E3 - S01 E03.mp4",
-    "location": "/Users/ahmadwael/Downloads/xtream/Phantom Lawyer",
-    "status": "paused",
-    "progress": 99,
-    "addedAt": "2026-04-17T21:46:48.627Z",
-    "downloadedBytes": 0
-  },
-  {
-    "id": "1776462408642w3mtwn",
-    "url": "http://mhiptv.info:2095/series/01063604029/01100602403/272068.mkv",
-    "filename": "Phantom Lawyer - S1E4 - S01 E04.mkv",
-    "location": "/Users/ahmadwael/Downloads/xtream/Phantom Lawyer",
-    "status": "paused",
-    "progress": 0,
-    "addedAt": "2026-04-17T21:46:48.642Z",
-    "downloadedBytes": 0
+    "id": "1776464690345452pj",
+    "url": "http://mhiptv.info:2095/movie/01063604029/01100602403/273939.mkv",
+    "filename": "The Super Mario Bros بالمصرى.mkv",
+    "location": "/Users/ahmadwael/Downloads/xtream/The Super Mario Bros بالمصرى",
+    "status": "downloading",
+    "progress": 6,
+    "addedAt": "2026-04-17T22:24:50.345Z",
+    "totalBytes": 1070209425,
+    "downloadedBytes": 67847792
   }
 ]
